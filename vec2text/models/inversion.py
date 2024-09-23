@@ -59,9 +59,7 @@ class InversionModel(transformers.PreTrainedModel):
             lora=config.use_lora,
         )
 
-        embedder, embedder_tokenizer = load_embedder_and_tokenizer(
-            name=config.embedder_model_name, torch_dtype=config.embedder_torch_dtype
-        )
+        embedder, embedder_tokenizer = self.load_embedder_and_tokenizer(config)
 
         tokenizer = load_tokenizer(
             config.model_name_or_path,
@@ -120,6 +118,11 @@ class InversionModel(transformers.PreTrainedModel):
         self.embedding_transform_strategy = "repeat"  # "none" # "repeat"
         self.embeddings_from_layer_n = embeddings_from_layer_n
         self.noise_level = vars(config).get("embedder_gaussian_noise_level")
+
+    def load_embedder_and_tokenizer(self, config):
+        return load_embedder_and_tokenizer(
+            name=config.embedder_model_name, torch_dtype=config.embedder_torch_dtype
+        )
 
     def _freeze_encoder(self):
         freeze_params(self.encoder_decoder.encoder)

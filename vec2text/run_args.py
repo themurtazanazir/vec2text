@@ -121,6 +121,11 @@ class ModelArguments:
     max_seq_length: int = field(
         default=128, metadata={"help": "Maximum sequence length for tokenizer"}
     )
+
+    max_new_tokens: int = field(
+        default=42, metadata={"help": "Maximum new tokens to generate for hidden states"}
+    )
+    
     torch_dtype: Optional[str] = field(
         default=None,
         metadata={
@@ -284,6 +289,7 @@ class TrainingArguments(transformers.TrainingArguments):
             "choices": [
                 "inversion",  # our model: projects and feeds to encoder-decoder
                 "inversion_from_logits",
+                "inversion_from_hidden_states",
                 "inversion_from_logits_emb",
                 "inversion_decoder_only",  # baseline: use single embedding as input to a decoder
                 "inversion_bow",

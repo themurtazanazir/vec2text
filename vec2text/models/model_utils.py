@@ -102,14 +102,23 @@ def stack_pool(
     return pooled_outputs
 
 
-def load_embedder_and_tokenizer(name: str, torch_dtype: str, **kwargs):
+def load_embedder_and_tokenizer(name: str, torch_dtype: str, use_hidden_states: bool=False, **kwargs):
     # TODO make abstract/argparse for it etc.
     # name = "gpt2" #### <--- TEMP. For debugging. Delete!
     model_kwargs = {
         "low_cpu_mem_usage": True,  # Not compatible with DeepSpeed
         "output_hidden_states": False,
     }
-
+    print(f"{use_hidden_states = }")
+    if use_hidden_states:
+        if name == "gpt2":
+            from vec2text.embedders.embeddings import GPT2Embedder
+            print("using embedder")
+            model = GPT2Embedder(max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"])
+            tokenizer = model.tokenizer
+        else:
+            raise Exception(f"hidden states are not supported for {name}")
+        return model, tokenizer
     if name == "dpr":
         # model = SentenceTransformer("sentence-transformers/facebook-dpr-question_encoder-multiset-base")
         model = transformers.DPRContextEncoder.from_pretrained(
