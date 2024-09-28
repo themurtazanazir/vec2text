@@ -54,13 +54,6 @@ class InversionFromHiddenStatesModel(InversionModel):
         embedder = self.embedder
 
         inputs_str = self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)
-        # emb_input_ids = self.embedder_tokenizer(
-        #     inputs_str,
-        #     max_length=self.config.max_seq_length,
-        #     truncation=True,
-        #     padding="max_length",
-        #     return_tensors="pt",
-        # ).to(next(self.parameters()).device)
 
         model_output = embedder(inputs_str)
         return model_output
@@ -73,7 +66,7 @@ class InversionFromHiddenStatesModel(InversionModel):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if frozen_embeddings is not None:
             embeddings = frozen_embeddings
-            assert len(embeddings.shape) == 2  # batch by d
+            assert len(embeddings.shape) == 3  # batch by d
         elif self.embedder_no_grad:
             with torch.no_grad():
                 embeddings = self.call_embedding_model(
