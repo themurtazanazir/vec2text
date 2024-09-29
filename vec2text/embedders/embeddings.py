@@ -12,6 +12,7 @@ class GPT2Embedder(nn.Module):  # converting to module so device stuff is handle
         super(GPT2Embedder, self).__init__()
 
         self.model = GPT2WithHidden.from_pretrained("gpt2")
+        self.model.eval()
         self.tokenizer = AutoTokenizer.from_pretrained("gpt2")
         self.tokenizer.pad_token = self.tokenizer.eos_token
 

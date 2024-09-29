@@ -37,7 +37,6 @@ class InversionFromHiddenStatesModel(InversionModel):
         self._softmax_in_log_space = True
 
     def load_embedder_and_tokenizer(self, config):
-        print("called hidden")
         return load_embedder_and_tokenizer(
             name=config.embedder_model_name,
             torch_dtype=config.embedder_torch_dtype,
