@@ -1,6 +1,7 @@
 import transformers
 from vec2text.experiments import experiment_from_args
 from vec2text.run_args import DataArguments, ModelArguments, TrainingArguments
+transformers.set_seed(42, deterministic=True)
 
 
 def main():
@@ -14,3 +15,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
