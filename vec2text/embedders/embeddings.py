@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from typing import List
+import warnings
 
 import torch
 from torch import nn
@@ -20,6 +21,9 @@ class GPT2Embedder(nn.Module):  # converting to module so device stuff is handle
         self.max_new_tokens = max_new_tokens
         
         self.config = SimpleNamespace(hidden_size=self.model.config.n_embd)
+    def train(self, mode):
+        warnings.warn("Tried to set a mode. This model is permanently set in eval mode")
+        return super().train(mode=False)
 
     def get_hidden_states(self, input_strings: List[str]):
         emb_input_ids = self.tokenizer(
