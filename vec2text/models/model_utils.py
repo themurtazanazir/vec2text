@@ -116,6 +116,11 @@ def load_embedder_and_tokenizer(name: str, torch_dtype: str, use_hidden_states: 
             print("using embedder")
             model = GPT2Embedder(max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"])
             tokenizer = model.tokenizer
+        elif name == "gpt2-random-transformed":
+            from vec2text.embedders.embeddings import GPT2RandomTransformEmbedder
+            print("using embedder")
+            model = GPT2RandomTransformEmbedder(max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"])
+            tokenizer = model.tokenizer  
         else:
             raise Exception(f"hidden states are not supported for {name}")
         return model, tokenizer
