@@ -136,15 +136,18 @@ class GPT2RandomCLRTransform(GPT2LMHeadModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
-        logprobs = torch.nn.functional.log_softmax(output.logits, dim=-1) # B, T, V
+        logprobs = torch.nn.functional.log_softmax(output.logits, dim=-1)  # B, T, V
         clr = logprobs - (
             (1 / logprobs.shape[0]) * torch.sum(logprobs, dim=-1, keepdims=True)
-        ) # B, T, V
+        )  # B, T, V
         if not hasattr(self, "transform"):
-            g = torch.Generator()
+            device = next(self.parameters()).device
+            g = torch.Generator(device=device)
             g.manual_seed(666)
-            self.transform = torch.randn(self.config.vocab_size, self.config.n_embd, generator=g, device=next(self.parameters()).device)
-        hidden_state = clr@self.transform # B, T, D
+            self.transform = torch.randn(
+                self.config.vocab_size, self.config.n_embd, generator=g, device=device
+            )
+        hidden_state = clr @ self.transform  # B, T, D
         return output, hidden_state
