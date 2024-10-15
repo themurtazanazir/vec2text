@@ -145,6 +145,6 @@ class GPT2RandomCLRTransform(GPT2LMHeadModel):
         if not hasattr(self, "transform"):
             g = torch.Generator()
             g.manual_seed(666)
-            self.transform = torch.randn(self.config.vocab_size, self.config.n_embd, generator=g)
+            self.transform = torch.randn(self.config.vocab_size, self.config.n_embd, generator=g, device=next(self.parameters()).device)
         hidden_state = clr@self.transform # B, T, D
         return output, hidden_state
