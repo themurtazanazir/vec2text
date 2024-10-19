@@ -140,7 +140,7 @@ class GPT2RandomCLRTransform(GPT2LMHeadModel):
         )
         logprobs = torch.nn.functional.log_softmax(output.logits, dim=-1)  # B, T, V
         clr = logprobs - (
-            (1 / logprobs.shape[0]) * torch.sum(logprobs, dim=-1, keepdims=True)
+            (1 / logprobs.shape[-1]) * torch.sum(logprobs, dim=-1, keepdims=True)
         )  # B, T, V
         if not hasattr(self, "transform"):
             device = next(self.parameters()).device
