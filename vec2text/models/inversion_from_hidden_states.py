@@ -179,3 +179,16 @@ class InversionFromHiddenStatesModel(InversionModel):
             decoder_input_ids=decoder_input_ids,
             past_key_values=past_key_values,
         )
+
+
+class InversionFromRandomTransformedHiddenStatesModel(InversionFromHiddenStatesModel):
+
+
+    def load_embedder_and_tokenizer(self, config):
+        return load_embedder_and_tokenizer(
+            name=f"{config.embedder_model_name}-random-transformed",
+            torch_dtype=config.embedder_torch_dtype,
+            use_hidden_states=True,
+            max_length=config.max_seq_length,
+            max_new_tokens=config.max_new_tokens,
+        )

@@ -4,7 +4,7 @@ import warnings
 
 import torch
 from torch import nn
-from vec2text.lms.gpt2 import GPT2WithHidden
+from vec2text.lms.gpt2 import GPT2WithHidden, GPT2RandomCLRTransform
 from transformers import AutoTokenizer
 
 
@@ -12,15 +12,19 @@ class GPT2Embedder(nn.Module):  # converting to module so device stuff is handle
     def __init__(self, max_length: int, max_new_tokens: int):
         super(GPT2Embedder, self).__init__()
 
-        self.model = GPT2WithHidden.from_pretrained("gpt2")
-        self.model.eval()
-        self.tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        self.tokenizer.pad_token = self.tokenizer.eos_token
-
+        self.model, self.tokenizer = self.load_model_and_tokenizer()
         self.max_length = max_length
         self.max_new_tokens = max_new_tokens
-        
         self.config = SimpleNamespace(hidden_size=self.model.config.n_embd)
+
+
+    def load_model_and_tokenizer(self):
+        model = GPT2WithHidden.from_pretrained("gpt2")
+        model.eval()
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+        return model, tokenizer
+
     def train(self, mode):
         warnings.warn("Tried to set a mode. This model is permanently set in eval mode")
         return super().train(mode=False)
@@ -36,19 +40,20 @@ class GPT2Embedder(nn.Module):  # converting to module so device stuff is handle
         output_states = []
 
         B, T = emb_input_ids.input_ids.shape
-        emb_input_ids['input_ids'] = torch.cat(
+        emb_input_ids["input_ids"] = torch.cat(
             (
                 emb_input_ids.input_ids,
                 torch.zeros(
                     B,
-                    self.max_new_tokens + 1, # i dont know why I am adding 1, but should not do any harm, right? right??
+                    self.max_new_tokens
+                    + 1,  # i dont know why I am adding 1, but should not do any harm, right? right??
                     dtype=emb_input_ids.input_ids.dtype,
                     device=emb_input_ids.input_ids.device,
                 ),
             ),
             dim=1,
         )
-        emb_input_ids['attention_mask'] = torch.cat(
+        emb_input_ids["attention_mask"] = torch.cat(
             (
                 emb_input_ids.attention_mask,
                 torch.zeros(
@@ -68,18 +73,32 @@ class GPT2Embedder(nn.Module):  # converting to module so device stuff is handle
                 logits = model_output.logits
 
                 p, i = torch.max(logits, dim=-1)
-                next_token = i[torch.arange(B), emb_input_ids.attention_mask.sum(-1) - 1]
-                emb_input_ids.input_ids[torch.arange(B), emb_input_ids.attention_mask.sum(-1)] = (
-                    next_token
-                )
+                next_token = i[
+                    torch.arange(B), emb_input_ids.attention_mask.sum(-1) - 1
+                ]
+                emb_input_ids.input_ids[
+                    torch.arange(B), emb_input_ids.attention_mask.sum(-1)
+                ] = next_token
                 output_states.append(
-                    hidden_state[torch.arange(B), emb_input_ids.attention_mask.sum(-1) - 1, :].unsqueeze(1)
+                    hidden_state[
+                        torch.arange(B), emb_input_ids.attention_mask.sum(-1) - 1, :
+                    ].unsqueeze(1)
                 )
                 emb_input_ids.attention_mask[
                     torch.arange(B), emb_input_ids.attention_mask.sum(-1)
                 ] = 1
         return torch.cat(output_states, dim=1)
 
-
     def __call__(self, *args, **kwargs):
         return self.get_hidden_states(*args, **kwargs)
+
+
+class GPT2RandomTransformEmbedder(GPT2Embedder):
+
+
+    def load_model_and_tokenizer(self):
+        model = GPT2RandomCLRTransform.from_pretrained("gpt2")
+        model.eval()
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+        return model, tokenizer

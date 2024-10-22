@@ -21,10 +21,12 @@ from vec2text.models import (
     InversionFromLogitsEmbModel,
     InversionFromLogitsModel,
     InversionFromHiddenStatesModel,
+    InversionFromRandomTransformedHiddenStatesModel,
     InversionModel,
     InversionModelBagOfWords,
     InversionModelDecoderOnly,
     InversionModelNonAutoregressive,
+
 )
 from vec2text.models.config import InversionConfig
 from vec2text.run_args import DataArguments, ModelArguments, TrainingArguments
@@ -541,6 +543,7 @@ class Experiment(abc.ABC):
         # when we forgot to cache using this argument.
         if self.model_args.use_frozen_embeddings_as_input:
             dataset_kwargs["use_frozen_embeddings_as_input"] = "True"
+            dataset_kwargs["embedder_model_name"] = self.model_args.embedder_model_name
             # Deprecated arg below. We used to cache different
             # embeddings for suffixes. Then they became the same.
             # Removing the below line will invalidate other
@@ -687,6 +690,11 @@ class InversionFromHiddenStatesExperiment(InversionFromLogitsExperiment):
     def load_model(self) -> transformers.PreTrainedModel:
         return InversionFromHiddenStatesModel(config=self.config)
 
+
+class InversionFromRandomTransformedHiddenStatesExperiment(InversionFromLogitsExperiment):
+
+    def load_model(self) -> transformers.PreTrainedModel:
+        return InversionFromRandomTransformedHiddenStatesModel(config=self.config)
   
 
 class InversionExperimentDecoderOnly(InversionExperiment):
@@ -809,6 +817,7 @@ EXPERIMENT_CLS_MAP = {
     "inversion_decoder_only": InversionExperimentDecoderOnly,
     "inversion_from_logits": InversionFromLogitsExperiment,
     "inversion_from_hidden_states": InversionFromHiddenStatesExperiment,
+    "inversion_from_random_transformed_hidden_states": InversionFromRandomTransformedHiddenStatesExperiment,
     "inversion_from_logits_emb": InversionFromLogitsExperiment,
     "corrector": CorrectorExperiment,
     "corrector_encoder": CorrectorExperiment,  # backwards-compatible; does same thing as just 'corrector'
