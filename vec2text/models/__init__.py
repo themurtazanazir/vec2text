@@ -4,7 +4,7 @@ from .inversion import InversionModel  # noqa: F401
 from .inversion_bow import InversionModelBagOfWords  # noqa: F401
 from .inversion_decoder import InversionModelDecoderOnly  # noqa: F401
 from .inversion_from_logits import InversionFromLogitsModel  # noqa: F401
-from .inversion_from_hidden_states import InversionFromHiddenStatesModel, InversionFromRandomTransformedHiddenStatesModel  # noqa: F401
+from .inversion_from_hidden_states import InversionFromHiddenStatesModel, InversionFromRandomTransformedHiddenStatesModel, ReverseInversionFromRandomTransformedHiddenStatesModel  # noqa: F401
 from .inversion_from_logits_emb import InversionFromLogitsEmbModel  # noqa: F401
 from .inversion_na import InversionModelNonAutoregressive  # noqa: F401
 from .model_utils import (  # noqa: F401
