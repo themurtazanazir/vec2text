@@ -220,7 +220,6 @@ class ReverseInversionFromRandomTransformedHiddenStatesModel(InversionFromHidden
             
             result[i][non_pad_mask] = reversed_tokens
         
-        print("aft", result)
         return result
 
 
