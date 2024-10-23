@@ -291,6 +291,7 @@ class TrainingArguments(transformers.TrainingArguments):
                 "inversion_from_logits",
                 "inversion_from_hidden_states",
                 "inversion_from_random_transformed_hidden_states",
+                "reverse_inversion_from_random_transformed_hidden_states",
                 "inversion_from_logits_emb",
                 "inversion_decoder_only",  # baseline: use single embedding as input to a decoder
                 "inversion_bow",
