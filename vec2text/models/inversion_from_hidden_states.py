@@ -25,7 +25,7 @@ class InversionFromHiddenStatesModel(InversionModel):
 
 
         self.embedding_transform = nn.Sequential(
-            nn.Linear(encoder_hidden_dim, bottleneck_dim),
+            nn.Linear(self.embedder_dim, bottleneck_dim),
             nn.Dropout(self.encoder_decoder.config.dropout_rate),
             nn.GELU(),
             nn.Linear(bottleneck_dim, encoder_hidden_dim),
