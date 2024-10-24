@@ -102,7 +102,9 @@ def stack_pool(
     return pooled_outputs
 
 
-def load_embedder_and_tokenizer(name: str, torch_dtype: str, use_hidden_states: bool=False, **kwargs):
+def load_embedder_and_tokenizer(
+    name: str, torch_dtype: str, use_hidden_states: bool = False, **kwargs
+):
     # TODO make abstract/argparse for it etc.
     # name = "gpt2" #### <--- TEMP. For debugging. Delete!
     model_kwargs = {
@@ -113,14 +115,29 @@ def load_embedder_and_tokenizer(name: str, torch_dtype: str, use_hidden_states: 
     if use_hidden_states:
         if name == "gpt2":
             from vec2text.embedders.embeddings import GPT2Embedder
+
             print("using embedder")
-            model = GPT2Embedder(max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"])
+            model = GPT2Embedder(
+                max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"]
+            )
             tokenizer = model.tokenizer
         elif name == "gpt2-random-transformed":
             from vec2text.embedders.embeddings import GPT2RandomTransformEmbedder
+
             print("using embedder")
-            model = GPT2RandomTransformEmbedder(max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"])
-            tokenizer = model.tokenizer  
+            model = GPT2RandomTransformEmbedder(
+                max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"]
+            )
+            tokenizer = model.tokenizer
+        elif name == "meta-llama/Llama-2-7b-hf-random-transformed":
+            from vec2text.embedders.embeddings import Llama2_7BRandomTransformEmbedder
+
+            model = Llama2_7BRandomTransformEmbedder(
+                max_length=kwargs["max_length"],
+                max_new_tokens=kwargs["max_new_tokens"],
+                torch_dtype=torch_dtype,
+            )
+            tokenizer = model.tokenizer
         else:
             raise Exception(f"hidden states are not supported for {name}")
         return model, tokenizer
@@ -184,9 +201,7 @@ def load_embedder_and_tokenizer(name: str, torch_dtype: str, use_hidden_states: 
         model = transformers.AutoModel.from_pretrained(
             "thenlper/gte-base", **model_kwargs
         )
-        tokenizer = transformers.AutoTokenizer.from_pretrained(
-            "thenlper/gte-base"
-        )
+        tokenizer = transformers.AutoTokenizer.from_pretrained("thenlper/gte-base")
     elif name == "ance_tele":
         model = transformers.AutoModel.from_pretrained(
             "OpenMatch/ance-tele_nq_psg-encoder", **model_kwargs

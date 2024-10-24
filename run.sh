@@ -24,7 +24,7 @@ nohup python vec2text/run.py --per_device_train_batch_size 240\
                     --use_frozen_embeddings_as_input 1\
                     --mock_embedder 0\
                     --use_less_data 1000000\
-                    --embedder_model_name gpt2\
+                    --embedder_model_name meta-llama/Llama-2-7b-hf\
                     --max_new_tokens 16\
-                    --output_dir /data/inversion/hidden_saves_random_transformed/\
-                    --exp_group_name 2024-10-15-random-transformed-clr-fixed &
+                    --output_dir /data/inversion/hidden_saves_random_transformed_llama2/\
+                    --exp_group_name llama-random-transformed-clr-fixed &
