@@ -133,10 +133,45 @@ class Llama2_7BRandomTransformEmbedder(Embedder):
         elif self.torch_dtype == "bfloat16":
             self.torch_dtype = torch.bfloat16
 
-        model = LlamaRandomCLRTransform.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", torch_dtype=self.torch_dtype
+        # bnb_config = transformers.BitsAndBytesConfig(
+        #     load_in_4bit=True,
+        #     bnb_4bit_quant_type="nf4",
+        #     bnb_4bit_use_double_quant=True,
+        #     bnb_4bit_compute_dtype=torch.bfloat16,
+        # )
+
+
+        model = transformers.AutoModelForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf",
+            torch_dtype=self.torch_dtype,
+            # quantization_config=bnb_config
         )
         model.eval()
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
         tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
         return model, tokenizer
+
+    def get_hidden_states(self, input_strings: List[str]):
+        emb_input_ids = self.tokenizer(
+            input_strings,
+            max_length=self.max_length,
+            truncation=True,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(next(self.model.parameters()).device)
+
+        output = self.model.generate(
+            **emb_input_ids,
+            max_new_tokens=42,
+            do_sample=False,
+            temperature=1,
+            top_p=None,
+            pad_token_id=self.tokenizer.pad_token_id,
+            output_scores=True,
+            return_dict_in_generate=True,
+            use_cache=True
+        )
+
+        hidden_states = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
+        return hidden_states
