@@ -173,5 +173,10 @@ class Llama2_7BRandomTransformEmbedder(Embedder):
             use_cache=True
         )
 
-        hidden_states = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
+
+        ##!!  this part is usually in lms and not in embedder.
+        logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
+        logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
+        clr = logprobs -  torch.mean(logprobs, dim=-1, keepdims=True) # B, T, V
+        hidden_states = clr[:, :, :self.model.config.hidden_size]
         return hidden_states
