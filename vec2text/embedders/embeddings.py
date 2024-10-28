@@ -163,7 +163,7 @@ class Llama2_7BRandomTransformEmbedder(Embedder):
 
         output = self.model.generate(
             **emb_input_ids,
-            max_new_tokens=42,
+            max_new_tokens=self.max_new_tokens,
             do_sample=False,
             temperature=1,
             top_p=None,
