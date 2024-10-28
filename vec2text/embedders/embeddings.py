@@ -178,5 +178,5 @@ class Llama2_7BRandomTransformEmbedder(Embedder):
         logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
         logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
         clr = logprobs -  torch.mean(logprobs, dim=-1, keepdims=True) # B, T, V
-        hidden_states = clr[:, :, :self.model.config.hidden_size]
+        hidden_states = clr[:, :, :(self.model.config.hidden_size+100)] # adding 100 to be safe
         return hidden_states
