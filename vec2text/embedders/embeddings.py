@@ -133,18 +133,18 @@ class Llama2_7BRandomTransformEmbedder(Embedder):
         elif self.torch_dtype == "bfloat16":
             self.torch_dtype = torch.bfloat16
 
-        # bnb_config = transformers.BitsAndBytesConfig(
-        #     load_in_4bit=True,
-        #     bnb_4bit_quant_type="nf4",
-        #     bnb_4bit_use_double_quant=True,
-        #     bnb_4bit_compute_dtype=torch.bfloat16,
-        # )
+        bnb_config = transformers.BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+        )
 
 
         model = transformers.AutoModelForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf",
             torch_dtype=self.torch_dtype,
-            # quantization_config=bnb_config
+            quantization_config=bnb_config
         )
         model.eval()
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
