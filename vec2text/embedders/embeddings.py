@@ -122,7 +122,7 @@ class Llama2_7BRandomTransformEmbedder(Embedder):
         super(Llama2_7BRandomTransformEmbedder, self).__init__(
             max_length=max_length, max_new_tokens=max_new_tokens
         )
-        self.config = SimpleNamespace(hidden_size=self.model.config.hidden_size)
+        self.config = SimpleNamespace(hidden_size=self.model.config.hidden_size+100)
 
     def load_model_and_tokenizer(self):
 
@@ -178,5 +178,5 @@ class Llama2_7BRandomTransformEmbedder(Embedder):
         logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
         logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
         clr = logprobs -  torch.mean(logprobs, dim=-1, keepdims=True) # B, T, V
-        hidden_states = clr[:, :, :(self.model.config.hidden_size+100)] # adding 100 to be safe
+        hidden_states = clr[:, :, :(self.config.hidden_size)] # adding 100 to be safe
         return hidden_states
