@@ -43,6 +43,7 @@ class InversionFromHiddenStatesModel(InversionModel):
             use_hidden_states=True,
             max_length=config.max_seq_length,
             max_new_tokens=config.max_new_tokens,
+            extra_tokens=config.extra_tokens,
         )
 
     def call_embedding_model(

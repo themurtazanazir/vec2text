@@ -92,3 +92,9 @@ class InversionFromLogitsTrainer(InversionTrainer):
                 )
 
         return closest_generations
+    
+    def train(self, *args, **kwargs):
+        del self.model.embedder.model
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        super().train(*args, **kwargs)

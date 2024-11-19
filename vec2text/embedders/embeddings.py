@@ -1,7 +1,9 @@
+from abc import ABC
 from types import SimpleNamespace
 from typing import List, Literal
 import warnings
 
+import numpy as np
 import torch
 from torch import nn
 import transformers
@@ -101,14 +103,172 @@ class GPT2Embedder(Embedder):  # converting to module so device stuff is handled
         return model, tokenizer
 
 
-class GPT2RandomTransformEmbedder(GPT2Embedder):
+class GPT2TransformedHiddenStateEmbedder(Embedder, ABC):
 
     def load_model_and_tokenizer(self):
-        model = GPT2RandomCLRTransform.from_pretrained("gpt2")
+        model = transformers.AutoModelForCausalLM.from_pretrained(
+            "gpt2",
+        )
         model.eval()
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
         tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
         return model, tokenizer
+
+    def extract_hidden_state_from_logprobs(self, logprobs):
+        raise NotImplementedError
+
+    def get_hidden_states(self, input_strings: List[str]):
+        logprobs = self.get_logprobs(input_strings=input_strings)
+        return self.extract_hidden_state_from_logprobs(logprobs)
+
+    def get_logprobs(self, input_strings: List[str]):
+        emb_input_ids = self.tokenizer(
+            input_strings,
+            max_length=self.max_length,
+            truncation=True,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(next(self.model.parameters()).device)
+
+        output = self.model.generate(
+            **emb_input_ids,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=False,
+            temperature=1,
+            top_p=None,
+            pad_token_id=self.tokenizer.pad_token_id,
+            output_scores=True,
+            return_dict_in_generate=True,
+            use_cache=True
+        )
+
+        ##!!  this part is usually in lms and not in embedder.
+        logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
+        logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
+        return logprobs
+
+
+class GPT2RandomTransformCLREmbedder(GPT2TransformedHiddenStateEmbedder):
+
+    def __init__(
+        self,
+        max_length: int,
+        max_new_tokens: int,
+    ):
+        super(GPT2RandomTransformCLREmbedder, self).__init__(
+            max_length=max_length, max_new_tokens=max_new_tokens
+        )
+        self.config = SimpleNamespace(hidden_size=self.model.config.n_embd)
+
+    def extract_hidden_state_from_logprobs(self, logprobs):
+        clr = logprobs - torch.mean(logprobs, dim=-1, keepdims=True)  # B, T, V
+        if not hasattr(self, "transform"):
+            g = torch.Generator()
+            g.manual_seed(666)
+            self.transform = torch.randn(
+                self.model.config.vocab_size,
+                self.config.hidden_size,
+                generator=g,
+            ).to(logprobs.device)
+        hidden_states = clr @ self.transform  # B, T, D
+
+        return hidden_states
+
+
+class GPT2RandomTransformALREmbedder(GPT2TransformedHiddenStateEmbedder):
+
+    def __init__(
+        self,
+        max_length: int,
+        max_new_tokens: int,
+    ):
+        super(GPT2RandomTransformALREmbedder, self).__init__(
+            max_length=max_length, max_new_tokens=max_new_tokens
+        )
+        self.config = SimpleNamespace(hidden_size=self.model.config.n_embd)
+
+    def extract_hidden_state_from_logprobs(self, logprobs):
+        alr = logprobs[:, :, 1:] - logprobs[:, :, 0:1]  # B, T, V
+        if not hasattr(self, "transform"):
+            g = torch.Generator()
+            g.manual_seed(666)
+            self.transform = torch.randn(
+                self.model.config.vocab_size - 1,
+                self.config.hidden_size,
+                generator=g,
+            ).to(logprobs.device)
+        hidden_states = alr @ self.transform  # B, T, D
+
+        return hidden_states
+
+
+class GPT2KTokensEmbedder(GPT2TransformedHiddenStateEmbedder, ABC):
+    def __init__(self, max_length: int, max_new_tokens: int, extra_tokens: int):
+        super(GPT2KTokensEmbedder, self).__init__(
+            max_length=max_length, max_new_tokens=max_new_tokens
+        )
+        assert extra_tokens >= 0
+        self.extra_tokens = extra_tokens
+
+        self.config = SimpleNamespace(
+            hidden_size=self.model.config.n_embd + extra_tokens
+        )
+
+
+class GPT2RandomKALREmbedder(GPT2KTokensEmbedder):
+
+    def extract_hidden_state_from_logprobs(self, logprobs):
+
+        if not hasattr(self, "chosen_tokens"):
+            g = torch.Generator()
+            g.manual_seed(666)
+            self.chosen_tokens = torch.randperm(
+                self.model.config.vocab_size,
+                generator=g,
+            )[
+                : self.config.hidden_size + 1
+            ]  # alr will remove one
+
+        logprobs = logprobs[:, :, self.chosen_tokens]
+        alr = logprobs[:, :, 1:] - logprobs[:, :, 0:1]  # B, T, V
+        return alr
+
+
+class GPT2RandomKCLREmbedder(GPT2KTokensEmbedder):
+
+    def extract_hidden_state_from_logprobs(self, logprobs):
+
+        if not hasattr(self, "chosen_tokens"):
+            g = torch.Generator()
+            g.manual_seed(666)
+            self.chosen_tokens = torch.randperm(
+                self.model.config.vocab_size,
+                generator=g,
+            )[: self.config.hidden_size]
+
+        clr = logprobs - torch.mean(logprobs, dim=-1, keepdims=True)  # B, T, V
+        clr = clr[:, :, self.chosen_tokens]
+        return clr
+
+
+class GPT2RandomKALREmbedder(GPT2KTokensEmbedder):
+
+    def extract_hidden_state_from_logprobs(self, logprobs):
+
+        if not hasattr(self, "chosen_tokens"):
+            g = torch.Generator()
+            g.manual_seed(666)
+            self.chosen_tokens = torch.randperm(
+                self.model.config.vocab_size,
+                generator=g,
+            )[
+                : self.config.hidden_size + 1
+            ]  # alr will remove one
+
+        logprobs = logprobs[:, :, self.chosen_tokens]
+        alr = logprobs[:, :, 1:] - logprobs[:, :, 0:1]  # B, T, V
+        return alr
 
 
 class Llama2_7BRandomTransformEmbedder(Embedder):
@@ -122,7 +282,7 @@ class Llama2_7BRandomTransformEmbedder(Embedder):
         super(Llama2_7BRandomTransformEmbedder, self).__init__(
             max_length=max_length, max_new_tokens=max_new_tokens
         )
-        self.config = SimpleNamespace(hidden_size=self.model.config.hidden_size)
+        self.config = SimpleNamespace(hidden_size=self.model.config.hidden_size + 100)
 
     def load_model_and_tokenizer(self):
 
@@ -172,10 +332,9 @@ class Llama2_7BRandomTransformEmbedder(Embedder):
             use_cache=True
         )
 
-
         ##!!  this part is usually in lms and not in embedder.
         logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
         logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
-        clr = logprobs -  torch.mean(logprobs, dim=-1, keepdims=True) # B, T, V
-        hidden_states = clr[:, :, :(self.model.config.hidden_size+100)] # adding 100 to be safe
+        clr = logprobs - torch.mean(logprobs, dim=-1, keepdims=True)  # B, T, V
+        hidden_states = clr[:, :, : (self.config.hidden_size)]  # adding 100 to be safe
         return hidden_states

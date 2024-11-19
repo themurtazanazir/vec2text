@@ -30,6 +30,10 @@ EMBEDDER_MODEL_NAMES = [
     "gpt2-medium",
     "gpt2-large",
     "gpt2-xl",
+    "gpt2-random_transform-clr",
+    "gpt2-random_transform-alr",
+    "gpt2-random_k-alr",
+    "gpt2-random_k-clr",
 ]
 
 
@@ -127,6 +131,32 @@ def load_embedder_and_tokenizer(
             print("using embedder")
             model = GPT2RandomTransformEmbedder(
                 max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"]
+            )
+            tokenizer = model.tokenizer
+        elif name == "gpt2-random_transform-clr":
+            from vec2text.embedders.embeddings import GPT2RandomTransformCLREmbedder
+            model = GPT2RandomTransformCLREmbedder(
+                max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"]
+            )
+            tokenizer = model.tokenizer
+        elif name == "gpt2-random_transform-alr":
+            from vec2text.embedders.embeddings import GPT2RandomTransformALREmbedder
+            model = GPT2RandomTransformALREmbedder(
+                max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"]
+            )
+            tokenizer = model.tokenizer
+        elif name == "gpt2-random_k-alr":
+            from vec2text.embedders.embeddings import GPT2RandomKALREmbedder
+            model = GPT2RandomKALREmbedder(
+                max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"],
+                extra_tokens=kwargs["extra_tokens"]
+            )
+            tokenizer = model.tokenizer
+        elif name == "gpt2-random_k-clr":
+            from vec2text.embedders.embeddings import GPT2RandomKCLREmbedder
+            model = GPT2RandomKCLREmbedder(
+                max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"],
+                extra_tokens=kwargs["extra_tokens"]
             )
             tokenizer = model.tokenizer
         elif name == "meta-llama/Llama-2-7b-hf-random-transformed":
