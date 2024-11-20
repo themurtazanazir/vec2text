@@ -103,17 +103,7 @@ class GPT2Embedder(Embedder):  # converting to module so device stuff is handled
         return model, tokenizer
 
 
-class GPT2TransformedHiddenStateEmbedder(Embedder, ABC):
-
-    def load_model_and_tokenizer(self):
-        model = transformers.AutoModelForCausalLM.from_pretrained(
-            "gpt2",
-        )
-        model.eval()
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "left"
-        return model, tokenizer
+class TransformedHiddenStateEmbedder(Embedder, ABC):
 
     def extract_hidden_state_from_logprobs(self, logprobs):
         raise NotImplementedError
@@ -149,17 +139,7 @@ class GPT2TransformedHiddenStateEmbedder(Embedder, ABC):
         return logprobs
 
 
-class GPT2RandomTransformCLREmbedder(GPT2TransformedHiddenStateEmbedder):
-
-    def __init__(
-        self,
-        max_length: int,
-        max_new_tokens: int,
-    ):
-        super(GPT2RandomTransformCLREmbedder, self).__init__(
-            max_length=max_length, max_new_tokens=max_new_tokens
-        )
-        self.config = SimpleNamespace(hidden_size=self.model.config.n_embd)
+class RandomTransformCLREmbedder(TransformedHiddenStateEmbedder, ABC):
 
     def extract_hidden_state_from_logprobs(self, logprobs):
         clr = logprobs - torch.mean(logprobs, dim=-1, keepdims=True)  # B, T, V
@@ -176,17 +156,7 @@ class GPT2RandomTransformCLREmbedder(GPT2TransformedHiddenStateEmbedder):
         return hidden_states
 
 
-class GPT2RandomTransformALREmbedder(GPT2TransformedHiddenStateEmbedder):
-
-    def __init__(
-        self,
-        max_length: int,
-        max_new_tokens: int,
-    ):
-        super(GPT2RandomTransformALREmbedder, self).__init__(
-            max_length=max_length, max_new_tokens=max_new_tokens
-        )
-        self.config = SimpleNamespace(hidden_size=self.model.config.n_embd)
+class RandomTransformALREmbedder(TransformedHiddenStateEmbedder, ABC):
 
     def extract_hidden_state_from_logprobs(self, logprobs):
         alr = logprobs[:, :, 1:] - logprobs[:, :, 0:1]  # B, T, V
@@ -203,7 +173,53 @@ class GPT2RandomTransformALREmbedder(GPT2TransformedHiddenStateEmbedder):
         return hidden_states
 
 
-class GPT2KTokensEmbedder(GPT2TransformedHiddenStateEmbedder, ABC):
+class GPT2RandomTransformCLREmbedder(RandomTransformCLREmbedder):
+
+    def __init__(
+        self,
+        max_length: int,
+        max_new_tokens: int,
+    ):
+        super(GPT2RandomTransformCLREmbedder, self).__init__(
+            max_length=max_length, max_new_tokens=max_new_tokens
+        )
+        self.config = SimpleNamespace(hidden_size=self.model.config.n_embd)
+
+    def load_model_and_tokenizer(self):
+        model = transformers.AutoModelForCausalLM.from_pretrained(
+            "gpt2",
+        )
+        model.eval()
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        return model, tokenizer
+
+
+class GPT2RandomTransformALREmbedder(RandomTransformALREmbedder):
+
+    def __init__(
+        self,
+        max_length: int,
+        max_new_tokens: int,
+    ):
+        super(GPT2RandomTransformALREmbedder, self).__init__(
+            max_length=max_length, max_new_tokens=max_new_tokens
+        )
+        self.config = SimpleNamespace(hidden_size=self.model.config.n_embd)
+
+    def load_model_and_tokenizer(self):
+        model = transformers.AutoModelForCausalLM.from_pretrained(
+            "gpt2",
+        )
+        model.eval()
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        return model, tokenizer
+
+
+class GPT2KTokensEmbedder(TransformedHiddenStateEmbedder, ABC):
     def __init__(self, max_length: int, max_new_tokens: int, extra_tokens: int):
         super(GPT2KTokensEmbedder, self).__init__(
             max_length=max_length, max_new_tokens=max_new_tokens
@@ -215,8 +231,77 @@ class GPT2KTokensEmbedder(GPT2TransformedHiddenStateEmbedder, ABC):
             hidden_size=self.model.config.n_embd + extra_tokens
         )
 
+    def load_model_and_tokenizer(self):
+        model = transformers.AutoModelForCausalLM.from_pretrained(
+            "gpt2",
+        )
+        model.eval()
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        return model, tokenizer
+
+
+class Llama2KTokensEmbedder(TransformedHiddenStateEmbedder, ABC):
+    def __init__(self, max_length: int, max_new_tokens: int, extra_tokens: int):
+        super(Llama2KTokensEmbedder, self).__init__(
+            max_length=max_length, max_new_tokens=max_new_tokens
+        )
+        assert extra_tokens >= 0
+        self.extra_tokens = extra_tokens
+
+        self.config = SimpleNamespace(
+            hidden_size=self.model.config.hidden_size + extra_tokens
+        )
+
+    def load_model_and_tokenizer(self):
+
+        if self.torch_dtype == "float32":
+            self.torch_dtype = torch.float32
+        elif self.torch_dtype == "float16":
+            self.torch_dtype = torch.float16
+        elif self.torch_dtype == "bfloat16":
+            self.torch_dtype = torch.bfloat16
+
+        # bnb_config = transformers.BitsAndBytesConfig(
+        #     load_in_4bit=True,
+        #     bnb_4bit_quant_type="nf4",
+        #     bnb_4bit_use_double_quant=True,
+        #     bnb_4bit_compute_dtype=torch.bfloat16,
+        # )
+
+        model = transformers.AutoModelForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf",
+            torch_dtype=self.torch_dtype,
+            # quantization_config=bnb_config,
+        )
+        model.eval()
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        return model, tokenizer
+
 
 class GPT2RandomKALREmbedder(GPT2KTokensEmbedder):
+
+    def extract_hidden_state_from_logprobs(self, logprobs):
+
+        if not hasattr(self, "chosen_tokens"):
+            g = torch.Generator()
+            g.manual_seed(666)
+            self.chosen_tokens = torch.randperm(
+                self.model.config.vocab_size,
+                generator=g,
+            )[
+                : self.config.hidden_size + 1
+            ]  # alr will remove one
+
+        logprobs = logprobs[:, :, self.chosen_tokens]
+        alr = logprobs[:, :, 1:] - logprobs[:, :, 0:1]  # B, T, V
+        return alr
+
+
+class Llama2RandomKALREmbedder(Llama2KTokensEmbedder):
 
     def extract_hidden_state_from_logprobs(self, logprobs):
 
@@ -252,7 +337,7 @@ class GPT2RandomKCLREmbedder(GPT2KTokensEmbedder):
         return clr
 
 
-class GPT2RandomKALREmbedder(GPT2KTokensEmbedder):
+class Llama2RandomKCLREmbedder(Llama2KTokensEmbedder):
 
     def extract_hidden_state_from_logprobs(self, logprobs):
 
@@ -262,13 +347,11 @@ class GPT2RandomKALREmbedder(GPT2KTokensEmbedder):
             self.chosen_tokens = torch.randperm(
                 self.model.config.vocab_size,
                 generator=g,
-            )[
-                : self.config.hidden_size + 1
-            ]  # alr will remove one
+            )[: self.config.hidden_size]
 
-        logprobs = logprobs[:, :, self.chosen_tokens]
-        alr = logprobs[:, :, 1:] - logprobs[:, :, 0:1]  # B, T, V
-        return alr
+        clr = logprobs - torch.mean(logprobs, dim=-1, keepdims=True)  # B, T, V
+        clr = clr[:, :, self.chosen_tokens]
+        return clr
 
 
 class Llama2_7BRandomTransformEmbedder(Embedder):

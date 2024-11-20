@@ -34,6 +34,9 @@ EMBEDDER_MODEL_NAMES = [
     "gpt2-random_transform-alr",
     "gpt2-random_k-alr",
     "gpt2-random_k-clr",
+    "llama2-random_k-alr",
+    "llama2-random_k-clr",
+    
 ]
 
 
@@ -159,6 +162,21 @@ def load_embedder_and_tokenizer(
                 extra_tokens=kwargs["extra_tokens"]
             )
             tokenizer = model.tokenizer
+        elif name == "llama2-random_k-alr":
+            from vec2text.embedders.embeddings import Llama2RandomKALREmbedder
+            model = Llama2RandomKALREmbedder(
+                max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"],
+                extra_tokens=kwargs["extra_tokens"]
+            )
+            tokenizer = model.tokenizer
+        elif name == "llama2-random_k-clr":
+            from vec2text.embedders.embeddings import Llama2RandomKCLREmbedder
+            model = Llama2RandomKCLREmbedder(
+                max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"],
+                extra_tokens=kwargs["extra_tokens"]
+            )
+            tokenizer = model.tokenizer
+        
         elif name == "meta-llama/Llama-2-7b-hf-random-transformed":
             from vec2text.embedders.embeddings import Llama2_7BRandomTransformEmbedder
 
