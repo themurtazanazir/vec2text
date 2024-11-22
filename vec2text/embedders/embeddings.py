@@ -243,7 +243,14 @@ class GPT2KTokensEmbedder(TransformedHiddenStateEmbedder, ABC):
 
 
 class Llama2KTokensEmbedder(TransformedHiddenStateEmbedder, ABC):
-    def __init__(self, max_length: int, max_new_tokens: int, extra_tokens: int):
+    def __init__(
+        self,
+        max_length: int,
+        max_new_tokens: int,
+        extra_tokens: int,
+        torch_dtype: Literal["float32", "float16", "bfloat16"],
+    ):
+        self.torch_dtype = torch_dtype
         super(Llama2KTokensEmbedder, self).__init__(
             max_length=max_length, max_new_tokens=max_new_tokens
         )

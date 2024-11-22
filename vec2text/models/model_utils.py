@@ -165,8 +165,10 @@ def load_embedder_and_tokenizer(
         elif name == "llama2-random_k-alr":
             from vec2text.embedders.embeddings import Llama2RandomKALREmbedder
             model = Llama2RandomKALREmbedder(
-                max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"],
-                extra_tokens=kwargs["extra_tokens"]
+                max_length=kwargs["max_length"],
+                max_new_tokens=kwargs["max_new_tokens"],
+                extra_tokens=kwargs["extra_tokens"],
+                torch_dtype=torch_dtype,
             )
             tokenizer = model.tokenizer
         elif name == "llama2-random_k-clr":
