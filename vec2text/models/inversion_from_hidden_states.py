@@ -23,7 +23,6 @@ class InversionFromHiddenStatesModel(InversionModel):
         self.embedder_is_decoder = True
         bottleneck_dim = self.bottleneck_dim
 
-
         self.embedding_transform = nn.Sequential(
             nn.Linear(self.embedder_dim, bottleneck_dim),
             nn.Dropout(self.encoder_decoder.config.dropout_rate),
@@ -57,7 +56,7 @@ class InversionFromHiddenStatesModel(InversionModel):
 
         model_output = embedder(inputs_str)
         return model_output
-    
+
     def embed_and_project(
         self,
         input_ids: Optional[torch.Tensor],
@@ -79,29 +78,6 @@ class InversionFromHiddenStatesModel(InversionModel):
                 attention_mask=attention_mask,
             )
 
-
-        # if self.training:
-        #     # Update unigram.
-        #     unigram_batch = embeddings.mean(dim=0, keepdim=True)
-        #     self.unigram.data = self.unigram.data * (
-        #         1 - self.unigram_beta
-        #     ) + unigram_batch * (self.unigram_beta)
-        # embeddings -= self.unigram
-
-        # if self._zero_except_topk is not None:
-        #     embeddings = zero_embedding_except_topk(
-        #         embeddings,
-        #         vocab_size=self.embedder.config.vocab_size,
-        #         k=self._zero_except_topk,
-        #         default_val=-30.0,
-        #     )
-
-        # embeddings = embeddings.to(self.sequence_weights.dtype)
-        # embeddings = embeddings.reshape(
-        #     (embeddings.shape[0], self.num_repeat_tokens, self.encoder_hidden_dim)
-        # )
-        # embeddings = torch.einsum("bsd,sdw->bsw", embeddings, self.sequence_weights)
-        # embeddings = embeddings.to(next(self.embedding_transform.parameters()).dtype)
         embeddings = self.embedding_transform(embeddings)
         attention_mask = torch.ones(
             (embeddings.shape[0], embeddings.shape[1]), device=embeddings.device
@@ -126,7 +102,8 @@ class InversionFromHiddenStatesModel(InversionModel):
         inputs: Dict[str, torch.Tensor],
         generation_kwargs: Dict[str, torch.Tensor],
     ) -> torch.Tensor:
-        generation_kwargs = copy.copy(generation_kwargs)  # make a copy so we can edit
+        # make a copy so we can edit
+        generation_kwargs = copy.copy(generation_kwargs)
         inputs_embeds, attention_mask = self.embed_and_project(
             input_ids=inputs.get("input_ids"),
             attention_mask=inputs.get("attention_mask"),
@@ -182,14 +159,55 @@ class InversionFromHiddenStatesModel(InversionModel):
         )
 
 
-class InversionFromRandomTransformedHiddenStatesModel(InversionFromHiddenStatesModel):
+class ReverseInversionFromHiddenStatesModel(InversionFromHiddenStatesModel):
 
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        labels: Optional[torch.Tensor] = None,
+        frozen_embeddings: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.Tensor] = None,
+        past_key_values: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> Dict[str, torch.Tensor]:
+        # Unused: input_ids, attention_mask
 
-    def load_embedder_and_tokenizer(self, config):
-        return load_embedder_and_tokenizer(
-            name=f"{config.embedder_model_name}-random-transformed",
-            torch_dtype=config.embedder_torch_dtype,
-            use_hidden_states=True,
-            max_length=config.max_seq_length,
-            max_new_tokens=config.max_new_tokens,
+        inputs_embeds, attention_mask = self.embed_and_project(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            frozen_embeddings=frozen_embeddings,
         )
+
+        # print("labels", labels)
+        # print("labels ecoded", self.tokenizer.batch_decode(labels))
+        reversed_labels = self.reverse_tokens_preserve_padding(labels)
+        # print("reversed_labels", reversed_labels)
+        # print("reversed decoded", self.tokenizer.batch_decode(reversed_labels))
+
+        return self.encoder_decoder(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            labels=reversed_labels,
+            decoder_input_ids=decoder_input_ids,
+            past_key_values=past_key_values,
+        )
+
+    def reverse_tokens_preserve_padding(
+        self,
+        tokens: torch.Tensor,
+    ) -> torch.Tensor:
+        pad_token_id = self.tokenizer.pad_token_id
+        eos_token_id = self.tokenizer.eos_token_id
+        result = tokens.clone()
+
+        for i in range(len(tokens)):
+            non_pad_mask = (tokens[i] != pad_token_id) & (tokens[i] != eos_token_id)
+            non_pad_tokens = tokens[i][non_pad_mask]
+
+            reversed_tokens = torch.flip(non_pad_tokens, [0])
+
+            result[i][non_pad_mask] = reversed_tokens
+
+        return result
+

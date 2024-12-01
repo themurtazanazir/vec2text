@@ -128,14 +128,6 @@ def load_embedder_and_tokenizer(
                 max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"]
             )
             tokenizer = model.tokenizer
-        elif name == "gpt2-random-transformed":
-            from vec2text.embedders.embeddings import GPT2RandomTransformEmbedder
-
-            print("using embedder")
-            model = GPT2RandomTransformEmbedder(
-                max_length=kwargs["max_length"], max_new_tokens=kwargs["max_new_tokens"]
-            )
-            tokenizer = model.tokenizer
         elif name == "gpt2-random_transform-clr":
             from vec2text.embedders.embeddings import GPT2RandomTransformCLREmbedder
             model = GPT2RandomTransformCLREmbedder(
