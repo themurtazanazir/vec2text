@@ -121,11 +121,12 @@ class ModelArguments:
     max_seq_length: int = field(
         default=128, metadata={"help": "Maximum sequence length for tokenizer"}
     )
-
     max_new_tokens: int = field(
         default=42, metadata={"help": "Maximum new tokens to generate for hidden states"}
     )
-    
+    extra_tokens: int = field(
+        default=-1, metadata={"help": "Extra tokens to sample in `random_k` embedders"}
+    )
     torch_dtype: Optional[str] = field(
         default=None,
         metadata={

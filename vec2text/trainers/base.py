@@ -458,37 +458,38 @@ class BaseTrainer(transformers.Trainer):
                 preds_sample_retokenized = preds_sample_retokenized[
                     : self.args.per_device_eval_batch_size, :
                 ]
-                pad_token_id = self.pad_token_id
-                preds_emb = self.call_embedding_model(
-                    input_ids=preds_sample_retokenized,
-                    attention_mask=(preds_sample_retokenized != pad_token_id).to(
-                        self.args.device
-                    ),
-                )
+                # pad_token_id = self.pad_token_id
+                # preds_emb = self.call_embedding_model(
+                #     input_ids=preds_sample_retokenized,
+                #     attention_mask=(preds_sample_retokenized != pad_token_id).to(
+                #         self.args.device
+                #     ),
+                # )
                 preds_sample_labels_retokenized = self.embedder_tokenizer(
                     decoded_labels, padding=True, truncation=False, return_tensors="pt"
                 )["input_ids"].to(preds_sample.device)
                 preds_sample_labels_retokenized = preds_sample_labels_retokenized[
                     : self.args.per_device_eval_batch_size, :
                 ]
-                labels_emb = self.call_embedding_model(
-                    input_ids=preds_sample_labels_retokenized,
-                    attention_mask=(preds_sample_labels_retokenized != pad_token_id).to(
-                        self.args.device
-                    ),
-                )
-                emb_cos_sims = torch.nn.CosineSimilarity(dim=1)(preds_emb, labels_emb)
-                emb_topk_equal = (
-                    (preds_emb[:, :32000].argmax(1) == labels_emb[:, :32000].argmax(1))
-                    .float()
-                    .cpu()
-                )
-                sim_result = {
-                    "emb_cos_sim": emb_cos_sims.mean().item(),
-                    "emb_cos_sim_sem": sem(emb_cos_sims.cpu().numpy()),
-                    "emb_top1_equal": emb_topk_equal.mean().item(),
-                    "emb_top1_equal_sem": sem(emb_topk_equal),
-                }
+                # labels_emb = self.call_embedding_model(
+                #     input_ids=preds_sample_labels_retokenized,
+                #     attention_mask=(preds_sample_labels_retokenized != pad_token_id).to(
+                #         self.args.device
+                #     ),
+                # )
+                # emb_cos_sims = torch.nn.CosineSimilarity(dim=1)(preds_emb, labels_emb)
+                # emb_topk_equal = (
+                #     (preds_emb[:, :32000].argmax(1) == labels_emb[:, :32000].argmax(1))
+                #     .float()
+                #     .cpu()
+                # )
+                # sim_result = {
+                #     "emb_cos_sim": emb_cos_sims.mean().item(),
+                #     "emb_cos_sim_sem": sem(emb_cos_sims.cpu().numpy()),
+                #     "emb_top1_equal": emb_topk_equal.mean().item(),
+                #     "emb_top1_equal_sem": sem(emb_topk_equal),
+                # }
+            sim_result = {"emb_cos_sim": 0, "emb_cos_sim_sem": 0}
 
         except (TypeError, RuntimeError):
             sim_result = {"emb_cos_sim": 0, "emb_cos_sim_sem": 0}

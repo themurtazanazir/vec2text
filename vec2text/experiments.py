@@ -552,6 +552,9 @@ class Experiment(abc.ABC):
             dataset_kwargs["suffix_conditioning"] = "False"
         if self.model_args.max_new_tokens:
             dataset_kwargs["max_new_tokens"] = self.model_args.max_new_tokens
+        if self.model_args.extra_tokens >= 0:
+            dataset_kwargs["extra_tokens"] = self.model_args.extra_tokens
+
 
         # os.environ["TOKENIZERS_PARALLELISM"] = "True"
         print(
