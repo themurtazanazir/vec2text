@@ -8,8 +8,7 @@ export WANDB_DIR=/data/inversion/inversion_vec2text/
 python -m pip install -e .
 rm -r build
 
-nohup python vec2text/run.py 
-                    --per_device_train_batch_size 240\
+nohup python vec2text/run.py --per_device_train_batch_size 240\
                     --per_device_eval_batch_size 240\
                     --max_seq_length 64\
                     --num_train_epochs 100\
@@ -28,6 +27,6 @@ nohup python vec2text/run.py
                     --embedder_model_name gpt2-random_k-alr\
                     --max_new_tokens 1\
                     --output_dir /data/inversion/reverse_hidden_random_k_alr/\
-                    --exp_group_name gpt2-reverse
+                    --exp_group_name gpt2-reverse\
                     --extra_tokens 100 &
 

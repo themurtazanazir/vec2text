@@ -159,7 +159,7 @@ class InversionFromHiddenStatesModel(InversionModel):
         )
 
 
-class ReverseInversionHiddenStatesModel(InversionFromHiddenStatesModel):
+class ReverseInversionFromHiddenStatesModel(InversionFromHiddenStatesModel):
 
     def forward(
         self,
