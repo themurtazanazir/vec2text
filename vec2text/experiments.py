@@ -21,7 +21,7 @@ from vec2text.models import (
     InversionFromLogitsEmbModel,
     InversionFromLogitsModel,
     InversionFromHiddenStatesModel,
-    InversionFromRandomTransformedHiddenStatesModel,
+    ReverseInversionFromHiddenStatesModel,
     InversionModel,
     InversionModelBagOfWords,
     InversionModelDecoderOnly,
@@ -694,11 +694,10 @@ class InversionFromHiddenStatesExperiment(InversionFromLogitsExperiment):
         return InversionFromHiddenStatesModel(config=self.config)
 
 
-class InversionFromRandomTransformedHiddenStatesExperiment(InversionFromLogitsExperiment):
+class ReverseInversionFromHiddenStatesExperiment(InversionFromLogitsExperiment):
 
     def load_model(self) -> transformers.PreTrainedModel:
-        return InversionFromRandomTransformedHiddenStatesModel(config=self.config)
-  
+        return ReverseInversionFromHiddenStatesModel(config=self.config)
 
 class InversionExperimentDecoderOnly(InversionExperiment):
     def load_model(self) -> transformers.PreTrainedModel:
@@ -820,7 +819,7 @@ EXPERIMENT_CLS_MAP = {
     "inversion_decoder_only": InversionExperimentDecoderOnly,
     "inversion_from_logits": InversionFromLogitsExperiment,
     "inversion_from_hidden_states": InversionFromHiddenStatesExperiment,
-    "inversion_from_random_transformed_hidden_states": InversionFromRandomTransformedHiddenStatesExperiment,
+    "reverse_inversion_from_hidden_states": ReverseInversionFromHiddenStatesExperiment,
     "inversion_from_logits_emb": InversionFromLogitsExperiment,
     "corrector": CorrectorExperiment,
     "corrector_encoder": CorrectorExperiment,  # backwards-compatible; does same thing as just 'corrector'
