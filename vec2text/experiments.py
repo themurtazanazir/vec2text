@@ -156,9 +156,7 @@ class Experiment(abc.ABC):
 
         # Log on each process a small summary of training.
         logger.warning(
-            f"Process rank: {training_args.local_rank}, device: {
-                training_args.device}, n_gpu: {training_args.n_gpu}, "
-            + f"fp16 training: {training_args.fp16}, bf16 training: {training_args.bf16}"
+            f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, " + f"fp16 training: {training_args.fp16}, bf16 training: {training_args.bf16}"
         )
         logger.info(f"Training/evaluation parameters {training_args}")
 
