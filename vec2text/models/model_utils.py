@@ -69,8 +69,7 @@ def disable_dropout(model: nn.Module):
     for m in dropout_modules:
         m.p = 0.0
     print(
-        f"Disabled {len(dropout_modules)} dropout modules from model type {
-            type(model)}"
+        f"Disabled {len(dropout_modules)} dropout modules from model type {type(model)}"
     )
 
 
