@@ -180,10 +180,10 @@ def load_embedder_and_tokenizer(
             )
             tokenizer = model.tokenizer
 
-        elif name == "llama2_chat-random_k-clr":
-            from vec2text.embedders.embeddings import Llama2ChatRandomKCLREmbedder
+        elif name == "llama2_chat-random_k-alr":
+            from vec2text.embedders.embeddings import Llama2ChatRandomKALREmbedder
 
-            model = Llama2ChatRandomKCLREmbedder(
+            model = Llama2ChatRandomKALREmbedder(
                 max_length=kwargs["max_length"],
                 max_new_tokens=kwargs["max_new_tokens"],
                 extra_tokens=kwargs["extra_tokens"],
