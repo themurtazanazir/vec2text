@@ -177,6 +177,7 @@ def load_embedder_and_tokenizer(
                 max_length=kwargs["max_length"],
                 max_new_tokens=kwargs["max_new_tokens"],
                 extra_tokens=kwargs["extra_tokens"],
+                torch_dtype=torch_dtype,
             )
             tokenizer = model.tokenizer
 
@@ -187,6 +188,7 @@ def load_embedder_and_tokenizer(
                 max_length=kwargs["max_length"],
                 max_new_tokens=kwargs["max_new_tokens"],
                 extra_tokens=kwargs["extra_tokens"],
+                torch_dtype=torch_dtype,
             )
             tokenizer = model.tokenizer
 
