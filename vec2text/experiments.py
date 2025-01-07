@@ -26,7 +26,6 @@ from vec2text.models import (
     InversionModelBagOfWords,
     InversionModelDecoderOnly,
     InversionModelNonAutoregressive,
-
 )
 from vec2text.models.config import InversionConfig
 from vec2text.run_args import DataArguments, ModelArguments, TrainingArguments
@@ -51,9 +50,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "False"
 device = torch.device(
     "cuda"
     if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
+    else "mps" if torch.backends.mps.is_available() else "cpu"
 )
 logger = logging.getLogger(__name__)
 
@@ -122,6 +119,7 @@ class Experiment(abc.ABC):
             "meta-llama/Llama-2-7b-chat-hf",
             "meta-llama/Llama-2-13b-chat-hf",
             "meta-llama/Llama-2-70b-chat-hf",
+            "llama2_chat-random_k-alr",
         ]
 
     @property
@@ -158,7 +156,8 @@ class Experiment(abc.ABC):
 
         # Log on each process a small summary of training.
         logger.warning(
-            f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+            f"Process rank: {training_args.local_rank}, device: {
+                training_args.device}, n_gpu: {training_args.n_gpu}, "
             + f"fp16 training: {training_args.fp16}, bf16 training: {training_args.bf16}"
         )
         logger.info(f"Training/evaluation parameters {training_args}")
@@ -222,7 +221,8 @@ class Experiment(abc.ABC):
                 and len(os.listdir(training_args.output_dir)) > 0
             ):
                 raise ValueError(
-                    f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                    f"Output directory ({
+                        training_args.output_dir}) already exists and is not empty. "
                     "Use --overwrite_output_dir to overcome."
                 )
             elif (
@@ -230,7 +230,8 @@ class Experiment(abc.ABC):
                 and training_args.resume_from_checkpoint is None
             ):
                 logger.info(
-                    f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+                    f"Checkpoint detected, resuming training at {
+                        last_checkpoint}. To avoid this behavior, change "
                     "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
                 )
         checkpoint = None
@@ -400,10 +401,12 @@ class Experiment(abc.ABC):
                     "text",
                     self.model_args.max_seq_length,
                     padding=False,
-                    prefix="search_document"
-                    if self.model_args.embedder_model_name
-                    == "nomic-ai/nomic-embed-text-v1"
-                    else None,
+                    prefix=(
+                        "search_document"
+                        if self.model_args.embedder_model_name
+                        == "nomic-ai/nomic-embed-text-v1"
+                        else None
+                    ),
                 ),
                 batched=True,
                 num_proc=get_num_proc(),
@@ -419,7 +422,8 @@ class Experiment(abc.ABC):
         ###########################################################################
         if self.model_args.use_frozen_embeddings_as_input:
             print(
-                f"[Precomputing embeddings with batch size: {self.training_args.per_device_train_batch_size}]"
+                f"[Precomputing embeddings with batch size: {
+                    self.training_args.per_device_train_batch_size}]"
             )
             assert torch.cuda.is_available()
             model = model.to(device)
@@ -554,7 +558,6 @@ class Experiment(abc.ABC):
         if self.model_args.extra_tokens >= 0:
             dataset_kwargs["extra_tokens"] = self.model_args.extra_tokens
 
-
         # os.environ["TOKENIZERS_PARALLELISM"] = "True"
         print(
             "Loading datasets with TOKENIZERS_PARALLELISM =",
@@ -644,7 +647,8 @@ class InversionExperiment(Experiment):
         )
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(
-            f"Training model with name `{self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
+            f"Training model with name `{
+                self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
         )
 
         if self.training_args.mock_embedder:
@@ -699,6 +703,7 @@ class ReverseInversionFromHiddenStatesExperiment(InversionFromLogitsExperiment):
     def load_model(self) -> transformers.PreTrainedModel:
         return ReverseInversionFromHiddenStatesModel(config=self.config)
 
+
 class InversionExperimentDecoderOnly(InversionExperiment):
     def load_model(self) -> transformers.PreTrainedModel:
         return InversionModelDecoderOnly(
@@ -725,7 +730,8 @@ class InversionExperimentNonAutoregressive(Experiment):
         )
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(
-            f"Training model with name `{self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
+            f"Training model with name `{
+                self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
         )
         return vec2text.trainers.InversionTrainerNonAutoregressive(
             model=model,
@@ -755,7 +761,8 @@ class InversionExperimentBagOfWords(Experiment):
         )
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(
-            f"Training model with name `{self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
+            f"Training model with name `{
+                self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
         )
         return vec2text.trainers.InversionTrainerBagOfWords(
             model=model,
@@ -822,7 +829,8 @@ EXPERIMENT_CLS_MAP = {
     "reverse_inversion_from_hidden_states": ReverseInversionFromHiddenStatesExperiment,
     "inversion_from_logits_emb": InversionFromLogitsExperiment,
     "corrector": CorrectorExperiment,
-    "corrector_encoder": CorrectorExperiment,  # backwards-compatible; does same thing as just 'corrector'
+    # backwards-compatible; does same thing as just 'corrector'
+    "corrector_encoder": CorrectorExperiment,
     #
     "inversion_bow": InversionExperimentBagOfWords,
     "inversion_na": InversionExperimentNonAutoregressive,
@@ -831,7 +839,8 @@ EXPERIMENT_CLS_MAP = {
 
 def experiment_from_args(model_args, data_args, training_args) -> Experiment:
     if training_args.experiment in EXPERIMENT_CLS_MAP:
-        experiment_cls = EXPERIMENT_CLS_MAP[training_args.experiment]  # type: ignore
+        # type: ignore
+        experiment_cls = EXPERIMENT_CLS_MAP[training_args.experiment]
     else:
         raise ValueError(f"Unknown experiment {training_args.experiment}")
     return experiment_cls(model_args, data_args, training_args)  # type: ignore
