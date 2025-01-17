@@ -327,6 +327,52 @@ class Llama2RandomKALREmbedder(Llama2KTokensEmbedder):
         return alr
 
 
+class Llama2ChatRandomKALREmbedder(Llama2KTokensEmbedder):
+
+    def load_model_and_tokenizer(self):
+
+        if self.torch_dtype == "float32":
+            self.torch_dtype = torch.float32
+        elif self.torch_dtype == "float16":
+            self.torch_dtype = torch.float16
+        elif self.torch_dtype == "bfloat16":
+            self.torch_dtype = torch.bfloat16
+
+        # bnb_config = transformers.BitsAndBytesConfig(
+        #     load_in_4bit=True,
+        #     bnb_4bit_quant_type="nf4",
+        #     bnb_4bit_use_double_quant=True,
+        #     bnb_4bit_compute_dtype=torch.bfloat16,
+        # )
+
+        model = transformers.AutoModelForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-chat-hf",
+            torch_dtype=self.torch_dtype,
+            # quantization_config=bnb_config,
+        )
+        model.eval()
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        return model, tokenizer
+
+    def extract_hidden_state_from_logprobs(self, logprobs):
+
+        if not hasattr(self, "chosen_tokens"):
+            g = torch.Generator()
+            g.manual_seed(666)
+            self.chosen_tokens = torch.randperm(
+                self.model.config.vocab_size,
+                generator=g,
+            )[
+                : self.config.hidden_size + 1
+            ]  # alr will remove one
+
+        logprobs = logprobs[:, :, self.chosen_tokens]
+        alr = logprobs[:, :, 1:] - logprobs[:, :, 0:1]  # B, T, V
+        return alr
+
+
 class GPT2RandomKCLREmbedder(GPT2KTokensEmbedder):
 
     def extract_hidden_state_from_logprobs(self, logprobs):
