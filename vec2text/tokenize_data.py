@@ -16,7 +16,11 @@ def tokenize_function(
 ) -> Callable[[Dict], Dict]:
     def tokenize_function_inner(examples) -> Dict[str, torch.Tensor]:
         if prefix:
-            texts = [f"{prefix}: {text}" for text in examples[text_column_name]]
+            texts = [
+                f"{prefix}: {
+                text}"
+                for text in examples[text_column_name]
+            ]
         else:
             texts = examples[text_column_name]
         output = tokenizer(
@@ -79,27 +83,25 @@ def tokenize_function_llama_chat(
             examples["suffix"] = examples[text_column_name]
 
         formatted_text = [
-                f"[INST] <<SYS>>\n{system_message}\n<</SYS>>\n {instruction} [/INST]"
-                for (system_message, instruction) in zip(
-                    examples["prefix"], examples["suffix"]
-                )
+            f"[INST] <<SYS>>\n{
+                system_message}\n<</SYS>>\n {instruction} [/INST]"
+            for (system_message, instruction) in zip(
+                examples["prefix"], examples["suffix"]
+            )
         ]
-        output = tokenizer(
+        unformatted_output = tokenizer(
             examples[text_column_name],
             padding=padding,
             truncation=True,
             max_length=max_seq_length,
         )
-        formatted_output = tokenizer(
-                formatted_text,
-                padding=padding,
-                truncation=True,
-                max_length=max_seq_length,
-                )
+        output = tokenizer(
+            formatted_text,
+            padding=padding,
+            truncation=True,
+            max_length=max_seq_length,
+        )
 
-
-        
-        output['input_ids'] = formatted_output['input_ids']
         # copy to 'labels' for language modeling loss
         # but set padding to -100
         # github.com/huggingface/transformers/blob/cbe63949d76efd153a1f389f38fe9ce1287e06b0/src/transformers/models/t5/modeling_t5.py#L1504-L1507
@@ -108,7 +110,7 @@ def tokenize_function_llama_chat(
                 (-100 if token_id == tokenizer.pad_token_id else token_id)
                 for token_id in ids
             ]
-            for ids in output["input_ids"]
+            for ids in unformatted_output["input_ids"]
         ]
         # embedder_output = embedder_tokenizer(
         #     text=[
@@ -138,18 +140,20 @@ def embed_dataset_batch(model: InversionModel, batch: Dict) -> Dict:
     assert "input_ids" in batch.keys(), f"invalid keys {batch.keys()}"
     assert hasattr(model, "call_embedding_model")
 
-    #input_ids = batch["input_ids"]
-    #inputs_str = model.tokenizer.batch_decode(input_ids, skip_special_tokens=True)
-    #emb_input_ids = model.embedder_tokenizer(
+    # input_ids = batch["input_ids"]
+    # inputs_str = model.tokenizer.batch_decode(input_ids, skip_special_tokens=True)
+    # emb_input_ids = model.embedder_tokenizer(
     #    inputs_str,
     #    max_length=model.config.max_seq_length,
     #    truncation=True,
     #    padding="max_length",
     #    return_tensors="pt",
-    #).to(next(model.parameters()).device)
+    # ).to(next(model.parameters()).device)
 
     with torch.no_grad():
-        batch["frozen_embeddings"] = model.call_embedding_model(batch['input_ids'], batch['attention_mask'])
+        batch["frozen_embeddings"] = model.call_embedding_model(
+            batch["input_ids"], batch["attention_mask"]
+        )
     return batch
 
 
@@ -177,6 +181,7 @@ def get_tokenizer_mapping(
 
     preservation = len(set(mapping.tolist())) / len(lm_vocab)
     print(
-        f"Mapped tokenizer {lm} to {inverter}. Preserved {preservation*100:.1f}% of unique tokens."
+        f"Mapped tokenizer {lm} to {inverter}. Preserved {
+            preservation*100:.1f}% of unique tokens."
     )
     return mapping
