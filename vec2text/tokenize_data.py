@@ -17,8 +17,7 @@ def tokenize_function(
     def tokenize_function_inner(examples) -> Dict[str, torch.Tensor]:
         if prefix:
             texts = [
-                f"{prefix}: {
-                text}"
+                f"{prefix}: {text}"
                 for text in examples[text_column_name]
             ]
         else:
