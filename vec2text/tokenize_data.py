@@ -173,7 +173,6 @@ def get_tokenizer_mapping(
 
     preservation = len(set(mapping.tolist())) / len(lm_vocab)
     print(
-        f"Mapped tokenizer {lm} to {inverter}. Preserved {
-            preservation*100:.1f}% of unique tokens."
+        f"Mapped tokenizer {lm} to {inverter}. Preserved {preservation*100:.1f}% of unique tokens."
     )
     return mapping
