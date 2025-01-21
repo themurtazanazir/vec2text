@@ -82,8 +82,7 @@ def tokenize_function_llama_chat(
             examples["suffix"] = examples[text_column_name]
 
         formatted_text = [
-            f"[INST] <<SYS>>\n{
-                system_message}\n<</SYS>>\n {instruction} [/INST]"
+            f"[INST] <<SYS>>\n{system_message}\n<</SYS>>\n {instruction} [/INST]"
             for (system_message, instruction) in zip(
                 examples["prefix"], examples["suffix"]
             )
