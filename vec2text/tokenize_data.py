@@ -89,12 +89,6 @@ def tokenize_function_llama_chat(
                 examples["prefix"], examples["suffix"]
             )
         ]
-        unformatted_output = tokenizer(
-            examples[text_column_name],
-            padding=padding,
-            truncation=True,
-            max_length=max_seq_length,
-        )
         output = tokenizer(
             formatted_text,
             padding=padding,
@@ -110,7 +104,7 @@ def tokenize_function_llama_chat(
                 (-100 if token_id == tokenizer.pad_token_id else token_id)
                 for token_id in ids
             ]
-            for ids in unformatted_output["input_ids"]
+            for ids in output["input_ids"]
         ]
         # embedder_output = embedder_tokenizer(
         #     text=[
