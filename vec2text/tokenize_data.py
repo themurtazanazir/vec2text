@@ -104,26 +104,22 @@ def tokenize_function_llama_chat(
             ]
             for ids in output["input_ids"]
         ]
-        # embedder_output = embedder_tokenizer(
-        #     text=[
-        #         f"[INST] <<SYS>>\n{system_message}\n<</SYS>>\n {instruction} [/INST]"
-        #         for (system_message, instruction) in zip(
-        #             examples["prefix"], examples["suffix"]
-        #         )
-        #     ],
-        #     padding="max_length",
-        #     truncation=True,
-        #     max_length=max_seq_length,
-        #     return_tensors="pt",
-        # )
-        # embedder_output = {f"embedder_{k}": v for k, v in embedder_output.items()}
+        embedder_output = embedder_tokenizer(
+            text=formatted_text,
+            padding="max_length",
+            truncation=True,
+            max_length=max_seq_length,
+            return_tensors="pt",
+        )
+        embedder_output = {f"embedder_{k}": v for k, v in embedder_output.items()}
 
         output["length"] = [
             (torch.tensor(input_ids) != tokenizer.pad_token_id).sum().item()
             for input_ids in output["input_ids"]
         ]
 
-        return output
+
+        return {**output, **embedder_output}
 
     return tokenize_function_inner
 
