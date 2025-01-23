@@ -118,7 +118,6 @@ def tokenize_function_llama_chat(
             for input_ids in output["input_ids"]
         ]
 
-
         return {**output, **embedder_output}
 
     return tokenize_function_inner

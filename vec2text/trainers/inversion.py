@@ -27,7 +27,7 @@ class InversionTrainer(BaseTrainer):
         Performs a training step. we override to compute data-specific metrics.
         """
         # TODO: Log training metrics from below... (How to do with huggingface?)
-        self._compute_data_metrics(inputs=inputs)
+        # self._compute_data_metrics(inputs=inputs)
         # self.log({ f"train/{k}": v for k,v in metrics.items() })
         return super().training_step(model, inputs)
 
