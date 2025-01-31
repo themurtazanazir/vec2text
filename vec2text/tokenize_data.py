@@ -88,7 +88,7 @@ def tokenize_function_llama_chat(
             )
         ]
         output = tokenizer(
-            formatted_text,
+            examples[text_column_name], # dont invert in the chat format
             padding=padding,
             truncation=True,
             max_length=max_seq_length,
@@ -139,7 +139,8 @@ def embed_dataset_batch(model: InversionModel, batch: Dict) -> Dict:
 
     with torch.no_grad():
         batch["frozen_embeddings"] = model.call_embedding_model(
-            batch["input_ids"], batch["attention_mask"]
+            embedder_input_ids=batch["embedder_input_ids"],
+            embedder_attention_mask=batch["embedder_attention_mask"]
         )
     return batch
 

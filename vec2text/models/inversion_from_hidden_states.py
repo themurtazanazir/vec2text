@@ -47,20 +47,21 @@ class InversionFromHiddenStatesModel(InversionModel):
 
     def call_embedding_model(
         self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        embedder_input_ids: torch.Tensor,
+        embedder_attention_mask: torch.Tensor,
     ) -> torch.Tensor:
         embedder = self.embedder
 
-        inputs_str = self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)
-
-        model_output = embedder(inputs_str)
+        model_output = embedder(
+            embedder_input_ids=embedder_input_ids,
+            embedder_attention_mask=embedder_attention_mask,
+        )
         return model_output
 
     def embed_and_project(
         self,
-        input_ids: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
+        embedder_input_ids: Optional[torch.Tensor],
+        embedder_attention_mask: Optional[torch.Tensor],
         frozen_embeddings: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if frozen_embeddings is not None:
@@ -69,18 +70,19 @@ class InversionFromHiddenStatesModel(InversionModel):
         elif self.embedder_no_grad:
             with torch.no_grad():
                 embeddings = self.call_embedding_model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
+                    embedder_input_ids=embedder_input_ids,
+                    embedder_attention_mask=embedder_attention_mask,
                 )
         else:
             embeddings = self.call_embedding_model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                embedder_input_ids=embedder_input_ids,
+                embedder_attention_mask=embedder_attention_mask,
             )
 
         embeddings = self.embedding_transform(embeddings)
         attention_mask = torch.ones(
-            (embeddings.shape[0], embeddings.shape[1]), device=embeddings.device
+            (embeddings.shape[0], embeddings.shape[1]),
+            device=embeddings.device
         )
 
         assert embeddings.shape == (
@@ -105,8 +107,8 @@ class InversionFromHiddenStatesModel(InversionModel):
         # make a copy so we can edit
         generation_kwargs = copy.copy(generation_kwargs)
         inputs_embeds, attention_mask = self.embed_and_project(
-            input_ids=inputs.get("input_ids"),
-            attention_mask=inputs.get("attention_mask"),
+            embedder_input_ids=inputs.get("embedder_input_ids"),
+            embedder_attention_mask=inputs.get("embedder_attention_mask"),
             frozen_embeddings=inputs.get("frozen_embeddings"),
         )
 
@@ -135,8 +137,8 @@ class InversionFromHiddenStatesModel(InversionModel):
 
     def forward(
         self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        embedder_input_ids: torch.Tensor,
+        embedder_attention_mask: torch.Tensor,
         labels: Optional[torch.Tensor] = None,
         frozen_embeddings: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
@@ -146,8 +148,8 @@ class InversionFromHiddenStatesModel(InversionModel):
         # Unused: input_ids, attention_mask
 
         inputs_embeds, attention_mask = self.embed_and_project(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+            embedder_input_ids=embedder_input_ids,
+            embedder_attention_mask=embedder_attention_mask,
             frozen_embeddings=frozen_embeddings,
         )
         return self.encoder_decoder(
@@ -210,4 +212,3 @@ class ReverseInversionFromHiddenStatesModel(InversionFromHiddenStatesModel):
             result[i][non_pad_mask] = reversed_tokens
 
         return result
-

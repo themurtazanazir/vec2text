@@ -24,38 +24,35 @@ class Embedder(nn.Module):
         warnings.warn("Tried to set a mode. This model is permanently set in eval mode")
         return super().train(mode=False)
 
-    def get_hidden_states(self, input_strings: List[str]):
-        emb_input_ids = self.tokenizer(
-            input_strings,
-            max_length=self.max_length,
-            truncation=True,
-            padding="max_length",
-            return_tensors="pt",
-        ).to(next(self.model.parameters()).device)
+    def get_hidden_states(self, embedder_input_ids, embedder_attention_mask):
+        device = next(self.model.parameters()).device
+        embedder_input_ids = embedder_input_ids.to(device)
+        embedder_attention_mask = embedder_attention_mask.to(device)
+
         output_states = []
 
-        B, T = emb_input_ids.input_ids.shape
-        emb_input_ids["input_ids"] = torch.cat(
+        B, T = embedder_input_ids.shape
+        embedder_input_ids = torch.cat(
             (
-                emb_input_ids.input_ids,
+                embedder_input_ids,
                 torch.zeros(
                     B,
                     self.max_new_tokens
                     + 1,  # i dont know why I am adding 1, but should not do any harm, right? right??
-                    dtype=emb_input_ids.input_ids.dtype,
-                    device=emb_input_ids.input_ids.device,
+                    dtype=embedder_input_ids.dtype,
+                    device=embedder_input_ids.device,
                 ),
             ),
             dim=1,
         )
-        emb_input_ids["attention_mask"] = torch.cat(
+        embedder_attention_mask = torch.cat(
             (
-                emb_input_ids.attention_mask,
+                embedder_attention_mask,
                 torch.zeros(
                     B,
                     self.max_new_tokens + 1,
-                    dtype=emb_input_ids.attention_mask.dtype,
-                    device=emb_input_ids.attention_mask.device,
+                    dtype=embedder_attention_mask.dtype,
+                    device=embedder_attention_mask.device,
                 ),
             ),
             dim=1,
@@ -63,24 +60,27 @@ class Embedder(nn.Module):
 
         with torch.no_grad():
             for _ in range(self.max_new_tokens):
-                model_output, hidden_state = self.model(**emb_input_ids)
+                model_output, hidden_state = self.model(
+                        input_ids=embedder_input_ids,
+                        attention_mask=embedder_attention_mask,
+                        )
 
                 logits = model_output.logits
 
                 p, i = torch.max(logits, dim=-1)
                 next_token = i[
-                    torch.arange(B), emb_input_ids.attention_mask.sum(-1) - 1
+                    torch.arange(B), embedder_attention_mask.sum(-1) - 1
                 ]
-                emb_input_ids.input_ids[
-                    torch.arange(B), emb_input_ids.attention_mask.sum(-1)
+                embedder_input_ids[
+                    torch.arange(B), embedder_attention_mask.sum(-1)
                 ] = next_token
                 output_states.append(
                     hidden_state[
-                        torch.arange(B), emb_input_ids.attention_mask.sum(-1) - 1, :
+                        torch.arange(B), embedder_attention_mask.sum(-1) - 1, :
                     ].unsqueeze(1)
                 )
-                emb_input_ids.attention_mask[
-                    torch.arange(B), emb_input_ids.attention_mask.sum(-1)
+                embedder_attention_mask[
+                    torch.arange(B), embedder_attention_mask.sum(-1)
                 ] = 1
         return torch.cat(output_states, dim=1)
 
@@ -108,21 +108,18 @@ class TransformedHiddenStateEmbedder(Embedder, ABC):
     def extract_hidden_state_from_logprobs(self, logprobs):
         raise NotImplementedError
 
-    def get_hidden_states(self, input_strings: List[str]):
-        logprobs = self.get_logprobs(input_strings=input_strings)
+    def get_hidden_states(self, embedder_input_ids, embedder_attention_mask):
+        logprobs = self.get_logprobs(embedder_input_ids=embedder_input_ids,
+                                     embedder_attention_mask=embedder_attention_mask)
         return self.extract_hidden_state_from_logprobs(logprobs)
 
-    def get_logprobs(self, input_strings: List[str]):
-        emb_input_ids = self.tokenizer(
-            input_strings,
-            max_length=self.max_length,
-            truncation=True,
-            padding="max_length",
-            return_tensors="pt",
-        ).to(next(self.model.parameters()).device)
-
+    def get_logprobs(self, embedder_input_ids, embedder_attention_mask):
+        device = next(self.model.parameters()).device 
+        embedder_input_ids = embedder_input_ids.to(device)
+        embedder_attention_mask = embedder_attention_mask.to(device)
         output = self.model.generate(
-            **emb_input_ids,
+            input_ids=embedder_input_ids,
+            attention_mask=embedder_attention_mask,
             max_new_tokens=self.max_new_tokens,
             do_sample=False,
             temperature=1,
