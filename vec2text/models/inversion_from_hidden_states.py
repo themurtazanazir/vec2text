@@ -47,10 +47,15 @@ class InversionFromHiddenStatesModel(InversionModel):
 
     def call_embedding_model(
         self,
-        embedder_input_ids: torch.Tensor,
-        embedder_attention_mask: torch.Tensor,
+        embedder_input_ids: Union[torch.Tensor, list],
+        embedder_attention_mask: Union[torch.Tensor, list],
     ) -> torch.Tensor:
         embedder = self.embedder
+
+        if isinstance(embedder_input_ids, list):
+            embedder_input_ids = torch.stack(embedder_input_ids)
+        if isinstance(embedder_attention_mask, list):
+            embedder_attention_mask = torch.stack(embedder_attention_mask)
 
         model_output = embedder(
             embedder_input_ids=embedder_input_ids,
