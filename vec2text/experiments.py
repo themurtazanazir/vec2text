@@ -414,9 +414,9 @@ class Experiment(abc.ABC):
         ###########################################################################
         for key in tokenized_datasets:
             tokenized_datasets[key].set_format("pt")
-            tokenized_datasets[key] = tokenized_datasets[key].add_column(
-                "idx", range(len(tokenized_datasets[key]))
-            )
+        tokenized_datasets["train"] = tokenized_datasets["train"].add_column(
+            "idx", range(len(tokenized_datasets["train"]))
+        )
         ###########################################################################
         if self.model_args.use_frozen_embeddings_as_input:
             print(
