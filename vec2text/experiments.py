@@ -572,6 +572,7 @@ class Experiment(abc.ABC):
         train_dataset_path = os.environ.get(
             "VEC2TEXT_TRAIN_DATASET_PATH", train_dataset_path
         )
+        print(f"Looking for train dataset at {train_dataset_path}")
         if os.path.exists(train_dataset_path):
             print("loading train dataset from path:", train_dataset_path)
             train_datasets = datasets.load_from_disk(train_dataset_path)
@@ -596,6 +597,8 @@ class Experiment(abc.ABC):
         val_dataset_path = os.path.join(
             DATASET_CACHE_PATH, (md5_hash_kwargs(**val_dataset_kwargs) + ".arrow")
         )
+        print(f"Looking for val dataset at {val_dataset_path}")
+
         assert val_dataset_path != train_dataset_path
         if os.path.exists(val_dataset_path):
             val_datasets_dict = datasets.load_from_disk(val_dataset_path)
