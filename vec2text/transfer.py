@@ -68,14 +68,15 @@ def get_overlap_toks(llama2_tokenizer, other_tokenizer, llama2_chosen_toks):
     chosen_strings = {k for k,v in llama_vocab.items() if v in llama2_chosen_toks}
 
     overlap_with_chosen = chosen_strings.intersection(overlap)
+    print(f"{len(overlap_with_chosen)=}")
 
     remaining = list(overlap - overlap_with_chosen)
     import random
     random.seed(4673)
     random.shuffle(remaining)
     
-    total_overlap_chosen = list(overlap_with_chosen) + remaining[:4200-len(overlap_with_chosen)]
-
+    #total_overlap_chosen = list(overlap_with_chosen) + remaining[:4200-len(overlap_with_chosen)]
+    total_overlap_chosen = remaining
     llama_overlap_toks = [llama_vocab[k] for k in total_overlap_chosen]
     other_overlap_toks = [other_vocab[k] for k in total_overlap_chosen]
 
@@ -112,11 +113,13 @@ def get_logprobs(model, tokenizer, strings):
 
 
 other_llm_name = "Qwen/Qwen2.5-7B-Instruct"
+#other_llm_name = "meta-llama/Llama-2-7b-chat-hf"
 other_llm = AutoModelForCausalLM.from_pretrained(other_llm_name, torch_dtype=torch.bfloat16)
 other_llm.eval()
 other_llm.to(device)
 other_tokenizer = AutoTokenizer.from_pretrained(other_llm_name)
 other_tokenizer.padding_side = "left"
+other_tokenizer.pad_token = other_tokenizer.eos_token
 
 ## invert from llama once to set its chosen_tokens
 output = invert("", "reverse", True)
@@ -124,22 +127,33 @@ print(output)
 llama_overlap_toks, other_overlap_toks = get_overlap_toks(trainer.embedder_tokenizer, other_tokenizer, model.embedder.chosen_tokens)
 prompt = "reverse the string"
 messages = [{"role":"system", "content":""},{"role":"user", "content":prompt}]
-text = other_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+text = other_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 other_logprobs = get_logprobs(other_llm, other_tokenizer, [text])
 other_logprobs = other_logprobs[0]
+_, decoded = torch.max(other_logprobs, dim=-1)
+decoded_string = other_tokenizer.decode(decoded)
+print(f"{decoded_string=}")
 import numpy as np
 
-llama_unembed = model.embedder.model.lm_head.weight.data
-llama_unembed = llama_unembed
-llama_unembed_alr = (llama_unembed-llama_unembed[[llama_overlap_toks[0]]]).cpu().float().numpy()
-other_logprobs_alr = (other_logprobs - other_logprobs[:, [other_overlap_toks[0]]]).cpu().float().numpy()
+llama_unembed = model.embedder.model.lm_head.weight.data.cpu().float().numpy()
+#llama_unembed_alr = (llama_unembed-llama_unembed[[llama_overlap_toks[0]]]).cpu().float().numpy()
+#other_logprobs_alr = (other_logprobs - other_logprobs[:, [other_overlap_toks[0]]]).cpu().float().numpy()
+
+#llama2_hidden_state, *_ = np.linalg.lstsq(
+#        llama_unembed_alr[llama_overlap_toks[1:]],
+#        other_logprobs_alr.T[other_overlap_toks[1:]]
+#        )
+
+W = llama_unembed[llama_overlap_toks]
+B = other_logprobs.T[other_overlap_toks].cpu().float().numpy()
+B = B - B.mean(axis=0, keepdims=True)
+# llama2_hidden_state, *_ = np.linalg.lstsq(
+#         llama_unembed[llama_overlap_toks], other_logprobs.T[other_overlap_toks].cpu().float().numpy())
 
 llama2_hidden_state, *_ = np.linalg.lstsq(
-        llama_unembed_alr[llama_overlap_toks[1:]],
-        other_logprobs_alr.T[other_overlap_toks[1:]]
-        )
-
-llama2_logits = torch.from_numpy(llama_unembed_alr @ llama2_hidden_state).to(device).T.unsqueeze(0)
+        W,B )
+#llama2_logits = torch.from_numpy(llama_unembed_alr @ llama2_hidden_state).to(device).T.unsqueeze(0)
+llama2_logits = torch.from_numpy(llama_unembed @ llama2_hidden_state).to(device).T.unsqueeze(0)
 llama2_logprobs = torch.nn.functional.log_softmax(llama2_logits, dim=-1)
 llama2_logprobs = llama2_logprobs[:, :, model.embedder.chosen_tokens]
 alr = llama2_logprobs[:, :, 1:] - llama2_logprobs[:, :, 0:1]  
@@ -158,3 +172,6 @@ output = model.encoder_decoder.generate(
                 max_new_tokens=64,
                 #**generation_kwargs,
             )
+
+strings = model.tokenizer.batch_decode(output)
+print(f"{strings=}")
