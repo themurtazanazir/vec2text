@@ -117,7 +117,6 @@ def generate(embedder_input_ids, embedder_attention_mask, optimize_fn,  debug=Fa
         batch_hidden_states.append(llama2_hidden_state)
     batch_hidden_states = torch.stack(batch_hidden_states) # b x max_toks x dims
     llama2_logits = (batch_hidden_states @ llama_unembed.T) # b x max_toks x vocab
-    print(f"{llama2_logits.shape=}")
     llama2_logprobs = torch.nn.functional.log_softmax(llama2_logits, dim=-1)
     llama2_logprobs = llama2_logprobs[:, :, model.embedder.chosen_tokens]
     alr = llama2_logprobs[:, :, 1:] - llama2_logprobs[:, :, 0:1]  
@@ -430,10 +429,12 @@ trainer.model.eval()
 
 
 
-other_llm_name = "Qwen/Qwen2.5-7B-Instruct"
+# other_llm_name = "Qwen/Qwen2.5-7B-Instruct"
 # other_llm_name = "meta-llama/Llama-3.1-8B-Instruct"
 # other_llm_name = "google/gemma-3-4b-it"
-#other_llm_name = "meta-llama/Llama-2-7b-chat-hf"
+# other_llm_name = "meta-llama/Llama-2-7b-chat-hf"
+# other_llm_name = "mistralai/Mistral-7B-Instruct-v0.3"
+other_llm_name = "meta-llama/Llama-2-13b-chat-hf"
 other_llm = AutoModelForCausalLM.from_pretrained(other_llm_name, torch_dtype=torch.bfloat16)
 other_llm.eval()
 other_llm.to(device)
@@ -455,7 +456,7 @@ for key in val_datasets_dict:
             "embedder":other_llm_name})
     
 import json
-with open(f"transform_metrics_qwen.json", "w") as f:
+with open(f"transform_metrics_{other_llm_name.replace('/','__')}.json", "w") as f:
     json.dump(metrics, f, indent=4)
 # val_datasets_dict = load_standard_val_datasets()
 # for name, dataset in val_datasets_dict.items():
