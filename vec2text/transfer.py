@@ -1,24 +1,27 @@
-import os
-os.environ["TMPDIR"]="/workspace/mnazir/vec2text/temp/"
-os.environ["HF_HUB_CACHE"]="/workspace/mnazir/vec2text/huggingface/hub/"
-os.environ["HF_HOME"]="/workspace/mnazir/vec2text/huggingface/"
-os.environ["VEC2TEXT_CACHE"]="/workspace/mnazir/vec2text/vec2text/"
-os.environ["WANDB_DIR"]="/workspace/mnazir/vec2text/"
-#os.environ["CUDA_VISIBLE_DEVICES"]="-1"
-
-import transformers
-from transformers import AutoTokenizer, AutoModelForCausalLM
-
-from vec2text.data_helpers import load_standard_val_datasets
-from vec2text.experiments import experiment_from_args
-from vec2text.run_args import DataArguments, ModelArguments, TrainingArguments
-from vec2text.utils import dataset_map_multi_worker, get_num_proc
-import copy
-from typing import Dict, Tuple, List, Optional, Union
-import tqdm
-import torch
+import json
+import optimize_transfer
 import nltk
-nltk.download('punkt_tab')
+import torch
+import tqdm
+from typing import Dict, Tuple, List, Optional, Union
+import copy
+from vec2text.utils import dataset_map_multi_worker, get_num_proc
+from vec2text.run_args import DataArguments, ModelArguments, TrainingArguments
+from vec2text.experiments import experiment_from_args
+from vec2text.data_helpers import load_standard_val_datasets
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import transformers
+import os
+
+os.environ["TMPDIR"] = "/workspace/mnazir/vec2text/temp/"
+os.environ["HF_HUB_CACHE"] = "/workspace/mnazir/vec2text/huggingface/hub/"
+os.environ["HF_HOME"] = "/workspace/mnazir/vec2text/huggingface/"
+os.environ["VEC2TEXT_CACHE"] = "/workspace/mnazir/vec2text/vec2text/"
+os.environ["WANDB_DIR"] = "/workspace/mnazir/vec2text/"
+# os.environ["CUDA_VISIBLE_DEVICES"]="-1"
+
+
+nltk.download("punkt_tab")
 
 
 def invert(sys, ins, chat_format):
@@ -26,26 +29,29 @@ def invert(sys, ins, chat_format):
     print(f"{strings=}", flush=True)
     t = trainer.embedder_tokenizer
     print(f"{t.padding_side=}")
-    inputs = t(strings, return_tensors='pt', padding='max_length',
-            # max_length=trainer.model.embedder.max_length, 
-            max_length=64,
-            truncation=True)
-    inputs = {f"embedder_{k}": v for k,v in inputs.items()}
+    inputs = t(
+        strings,
+        return_tensors="pt",
+        padding="max_length",
+        # max_length=trainer.model.embedder.max_length,
+        max_length=64,
+        truncation=True,
+    )
+    inputs = {f"embedder_{k}": v for k, v in inputs.items()}
     gen_kwargs = copy.copy(trainer.gen_kwargs)
     max_length = trainer.model.config.max_seq_length
     gen_kwargs["max_length"] = max_length
-    outputs = trainer.generate(inputs, generation_kwargs={'max_new_tokens': 64})
+    outputs = trainer.generate(inputs, generation_kwargs={"max_new_tokens": 64})
     output_strings = trainer.tokenizer.batch_decode(outputs, skip_special_tokens=True)
     return output_strings[0]
-
 
 
 def get_overlap_toks(llama2_tokenizer, other_tokenizer, llama2_chosen_toks):
     llama_vocab = llama2_tokenizer.get_vocab()
     other_vocab = other_tokenizer.get_vocab()
 
-    overlap = set(llama_vocab).intersection(set(other_vocab)) # in string formats
-    chosen_strings = {k for k,v in llama_vocab.items() if v in llama2_chosen_toks}
+    overlap = set(llama_vocab).intersection(set(other_vocab))  # in string formats
+    chosen_strings = {k for k, v in llama_vocab.items() if v in llama2_chosen_toks}
 
     overlap_with_chosen = chosen_strings.intersection(overlap)
     print(f"{len(overlap_with_chosen)=}")
@@ -54,12 +60,13 @@ def get_overlap_toks(llama2_tokenizer, other_tokenizer, llama2_chosen_toks):
     overlap = list(sorted(overlap))
     print(f"{len(overlap)=}")
     import random
+
     random.seed(4673)
     random.shuffle(overlap)
     # random.shuffle(remaining)
-    
-    #total_overlap_chosen = list(overlap_with_chosen) + remaining[:4200-len(overlap_with_chosen)]
-    #total_overlap_chosen = remaining
+
+    # total_overlap_chosen = list(overlap_with_chosen) + remaining[:4200-len(overlap_with_chosen)]
+    # total_overlap_chosen = remaining
     total_overlap_chosen = overlap[:]
     llama_overlap_toks = [llama_vocab[k] for k in total_overlap_chosen]
     other_overlap_toks = [other_vocab[k] for k in total_overlap_chosen]
@@ -69,7 +76,7 @@ def get_overlap_toks(llama2_tokenizer, other_tokenizer, llama2_chosen_toks):
 
 def get_logprobs(model, tokenizer, embedder_input_ids, embedder_attention_mask):
     # inputs = tokenizer(strings, return_tensors='pt', padding='max_length',
-    #         # max_length=trainer.model.embedder.max_length, 
+    #         # max_length=trainer.model.embedder.max_length,
     #         max_length=64,
     #         truncation=True)
     # embedder_input_ids = inputs.input_ids
@@ -87,7 +94,7 @@ def get_logprobs(model, tokenizer, embedder_input_ids, embedder_attention_mask):
         pad_token_id=tokenizer.pad_token_id,
         output_scores=True,
         return_dict_in_generate=True,
-        use_cache=True
+        use_cache=True,
     )
 
     ##!!  this part is usually in lms and not in embedder.
@@ -96,14 +103,16 @@ def get_logprobs(model, tokenizer, embedder_input_ids, embedder_attention_mask):
     return logprobs
 
 
-import optimize_transfer
+def generate(embedder_input_ids, embedder_attention_mask, optimize_fn, debug=False):
 
-def generate(embedder_input_ids, embedder_attention_mask, optimize_fn,  debug=False):
-
-    llama_overlap_toks, other_overlap_toks = get_overlap_toks(trainer.embedder_tokenizer, other_tokenizer, model.embedder.chosen_tokens)
+    llama_overlap_toks, other_overlap_toks = get_overlap_toks(
+        trainer.embedder_tokenizer, other_tokenizer, model.embedder.chosen_tokens
+    )
     # messages = [{"role":"system", "content":sys},{"role":"user", "content":prompt}]
     # text = other_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    other_logprobs = get_logprobs(other_llm, other_tokenizer, embedder_input_ids, embedder_attention_mask)
+    other_logprobs = get_logprobs(
+        other_llm, other_tokenizer, embedder_input_ids, embedder_attention_mask
+    )
     if debug:
         _, decoded = torch.max(other_logprobs, dim=-1)
         decoded_string = other_tokenizer.decode(decoded)
@@ -113,139 +122,138 @@ def generate(embedder_input_ids, embedder_attention_mask, optimize_fn,  debug=Fa
     llama_unembed = model.embedder.model.lm_head.weight.data.float()
     batch_hidden_states = []
     for lps in other_logprobs:
-        llama2_hidden_state = optimize_fn(llama_unembed, lps, llama_overlap_toks, other_overlap_toks)
+        llama2_hidden_state = optimize_fn(
+            llama_unembed, lps, llama_overlap_toks, other_overlap_toks
+        )
         batch_hidden_states.append(llama2_hidden_state)
-    batch_hidden_states = torch.stack(batch_hidden_states) # b x max_toks x dims
-    llama2_logits = (batch_hidden_states @ llama_unembed.T) # b x max_toks x vocab
+    batch_hidden_states = torch.stack(batch_hidden_states)  # b x max_toks x dims
+    # b x max_toks x vocab
+    llama2_logits = batch_hidden_states @ llama_unembed.T
     llama2_logprobs = torch.nn.functional.log_softmax(llama2_logits, dim=-1)
     llama2_logprobs = llama2_logprobs[:, :, model.embedder.chosen_tokens]
-    alr = llama2_logprobs[:, :, 1:] - llama2_logprobs[:, :, 0:1]  
+    alr = llama2_logprobs[:, :, 1:] - llama2_logprobs[:, :, 0:1]
     embeddings = model.embedding_transform(alr)
     attention_mask = torch.ones(
-            (embeddings.shape[0], embeddings.shape[1]),
-            device=embeddings.device
+        (embeddings.shape[0], embeddings.shape[1]), device=embeddings.device
     )
     output = model.encoder_decoder.generate(
-                    # required: input embeddings
-                    inputs_embeds=embeddings,
-                    attention_mask=attention_mask,
-                    # optional: input IDs (for starting generation).
-                    # typically not set unless generating prefixes for
-                    # reranking.
-                    max_new_tokens=64,
-                    #**generation_kwargs,
-                )
+        # required: input embeddings
+        inputs_embeds=embeddings,
+        attention_mask=attention_mask,
+        # optional: input IDs (for starting generation).
+        # typically not set unless generating prefixes for
+        # reranking.
+        max_new_tokens=64,
+        # **generation_kwargs,
+    )
     return output
 
     strings = model.tokenizer.batch_decode(output, skip_special_tokens=True)
     return strings
 
 
-
-
 def eval_generation_metrics(
-        trainer, dataloader: torch.utils.data.DataLoader,
-        transform_fn
-        ) -> Dict[str, float]:
+    trainer, dataloader: torch.utils.data.DataLoader, transform_fn
+) -> Dict[str, float]:
     # Get decoded text. Note that this is different than `preds`, which
-        # is used to compute the loss.
-        preds_sample_list, preds_sample_labels_list = _get_decoded_sequences(
-                trainer,
-                dataloader=dataloader, n=10000,
-                transform_fn=transform_fn,
-                )
+    # is used to compute the loss.
+    preds_sample_list, preds_sample_labels_list = _get_decoded_sequences(
+        trainer,
+        dataloader=dataloader,
+        n=10000,
+        transform_fn=transform_fn,
+    )
 
-        # Log BLEU, log table of text.
-        decoded_preds = trainer.tokenizer.batch_decode(
-            preds_sample_list, skip_special_tokens=True
-        )
-        decoded_labels = trainer.tokenizer.batch_decode(
-            preds_sample_labels_list, skip_special_tokens=True
-        )
-        bleu_result = trainer._text_comparison_metrics(
-            predictions_ids=preds_sample_list,
-            predictions_str=decoded_preds,
-            references_ids=preds_sample_labels_list,
-            references_str=decoded_labels,
-        )
-        trainer._log_preds_table(
-            table_key="val_text_preds",
-            decoded_preds=decoded_preds,
-            decoded_labels=decoded_labels,
-        )
+    # Log BLEU, log table of text.
+    decoded_preds = trainer.tokenizer.batch_decode(
+        preds_sample_list, skip_special_tokens=True
+    )
+    decoded_labels = trainer.tokenizer.batch_decode(
+        preds_sample_labels_list, skip_special_tokens=True
+    )
+    bleu_result = trainer._text_comparison_metrics(
+        predictions_ids=preds_sample_list,
+        predictions_str=decoded_preds,
+        references_ids=preds_sample_labels_list,
+        references_str=decoded_labels,
+    )
+    trainer._log_preds_table(
+        table_key="val_text_preds",
+        decoded_preds=decoded_preds,
+        decoded_labels=decoded_labels,
+    )
 
-        if not len(decoded_preds):
-            return {}
-        print("[pred]", decoded_preds[0])
-        print("[true]", decoded_labels[0])
-        print("\n\n")
-        print("[pred]", decoded_preds[1])
-        print("[true]", decoded_labels[1])
-        print("\n\n")
-        print("[pred]", decoded_preds[2])
-        print("[true]", decoded_labels[2])
+    if not len(decoded_preds):
+        return {}
+    print("[pred]", decoded_preds[0])
+    print("[true]", decoded_labels[0])
+    print("\n\n")
+    print("[pred]", decoded_preds[1])
+    print("[true]", decoded_labels[1])
+    print("\n\n")
+    print("[pred]", decoded_preds[2])
+    print("[true]", decoded_labels[2])
 
-        # Compute sims of eval data using embedder.
-        preds_sample = torch.tensor(preds_sample_list, device=trainer.args.device)[:128]
-        preds_sample_labels = torch.tensor(
-            preds_sample_labels_list, device=trainer.args.device
-        )[:128]
+    # Compute sims of eval data using embedder.
+    preds_sample = torch.tensor(preds_sample_list, device=trainer.args.device)[:128]
+    preds_sample_labels = torch.tensor(
+        preds_sample_labels_list, device=trainer.args.device
+    )[:128]
 
-        # Log num tokens.
-        num_tokens_metrics = {
-            "pred_num_tokens": (
-                (preds_sample != trainer.pad_token_id)
-                & (preds_sample != trainer.bos_token_id)
+    # Log num tokens.
+    num_tokens_metrics = {
+        "pred_num_tokens": (
+            (preds_sample != trainer.pad_token_id)
+            & (preds_sample != trainer.bos_token_id)
+        )
+        .sum(1)
+        .float()
+        .mean()
+        .item(),
+        "true_num_tokens": (
+            (preds_sample_labels != trainer.pad_token_id)
+            & (preds_sample_labels != trainer.bos_token_id)
+        )
+        .sum(1)
+        .float()
+        .mean()
+        .item(),
+    }
+
+    # Fix eos token on generated text.
+    # bos_token_id = trainer.embedder_tokenizer.pad_token_id
+    # assert (preds_sample[:, 0] == bos_token_id).all()
+    eos_token_id = trainer.embedder_tokenizer.eos_token_id
+    if eos_token_id is not None:
+        eos_tokens = (
+            torch.ones(
+                (len(preds_sample), 1),
+                dtype=torch.long,
+                device=trainer.args.device,
             )
-            .sum(1)
-            .float()
-            .mean()
-            .item(),
-            "true_num_tokens": (
-                (preds_sample_labels != trainer.pad_token_id)
-                & (preds_sample_labels != trainer.bos_token_id)
-            )
-            .sum(1)
-            .float()
-            .mean()
-            .item(),
-        }
+            * eos_token_id
+        )
+        preds_sample = torch.cat((preds_sample[:, 1:], eos_tokens), dim=1)
+        # assert preds_sample.shape == preds_sample_labels.shape
 
-        # Fix eos token on generated text.
-        # bos_token_id = trainer.embedder_tokenizer.pad_token_id
-        # assert (preds_sample[:, 0] == bos_token_id).all()
-        eos_token_id = trainer.embedder_tokenizer.eos_token_id
-        if eos_token_id is not None:
-            eos_tokens = (
-                torch.ones(
-                    (len(preds_sample), 1),
-                    dtype=torch.long,
-                    device=trainer.args.device,
-                )
-                * eos_token_id
-            )
-            preds_sample = torch.cat((preds_sample[:, 1:], eos_tokens), dim=1)
-            # assert preds_sample.shape == preds_sample_labels.shape
+    sim_result = {"emb_cos_sim": 0, "emb_cos_sim_sem": 0}
 
+    # Store stuff for access later.
+    # trainer.preds_emb = preds_emb.cpu()
+    # trainer.labels_emb = labels_emb.cpu()
+    trainer.preds_sample_list = preds_sample_list
+    trainer.preds_sample_labels_list = preds_sample_labels_list
 
-        sim_result = {"emb_cos_sim": 0, "emb_cos_sim_sem": 0}
-
-        # Store stuff for access later.
-        # trainer.preds_emb = preds_emb.cpu()
-        # trainer.labels_emb = labels_emb.cpu()
-        trainer.preds_sample_list = preds_sample_list
-        trainer.preds_sample_labels_list = preds_sample_labels_list
-
-        metrics = {**num_tokens_metrics, **bleu_result, **sim_result}
-        return metrics
-
-
+    metrics = {**num_tokens_metrics, **bleu_result, **sim_result}
+    return metrics
 
 
 def _get_decoded_sequences(
-        trainer, dataloader: torch.utils.data.DataLoader, n: int,
-        transform_fn,
-        ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
+    trainer,
+    dataloader: torch.utils.data.DataLoader,
+    n: int,
+    transform_fn,
+) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
     """Iterates through eval dataset and does decoding.
 
     TODO: do this better. We shouldn't need to iterate through eval set twice
@@ -261,29 +269,29 @@ def _get_decoded_sequences(
     all_preds = []
     all_labels = []
     for step, inputs in enumerate(
-            tqdm.tqdm(dataloader, desc="generating from val", leave=False)
-            ):
+        tqdm.tqdm(dataloader, desc="generating from val", leave=False)
+    ):
         # https://huggingface.co/docs/transformers/v4.26.1/en/main_classes/text_generation#transformers.GenerationMixin.generate
         inputs_cuda = {k: v.to(trainer.args.device) for k, v in inputs.items()}
         max_length = trainer.model.config.max_seq_length
         gen_kwargs["max_length"] = max_length
         with torch.no_grad():
             generated_text = generate(
-                    embedder_input_ids = inputs_cuda["embedder_input_ids"],
-                    embedder_attention_mask = inputs_cuda["embedder_attention_mask"],
-                    optimize_fn=transform_fn,
-                    # generation_kwargs=gen_kwargs
-                    )
+                embedder_input_ids=inputs_cuda["embedder_input_ids"],
+                embedder_attention_mask=inputs_cuda["embedder_attention_mask"],
+                optimize_fn=transform_fn,
+                # generation_kwargs=gen_kwargs
+            )
         if generated_text.shape[1] < max_length:
             # Pad generated text to max length
             pad_tokens = (
-                    torch.ones(
-                        (generated_text.shape[0], max_length - generated_text.shape[1]),
-                        dtype=torch.long,
-                        device=generated_text.device,
-                        )
-                    * trainer.pad_token_id
-                    )
+                torch.ones(
+                    (generated_text.shape[0], max_length - generated_text.shape[1]),
+                    dtype=torch.long,
+                    device=generated_text.device,
+                )
+                * trainer.pad_token_id
+            )
             generated_text = torch.cat((generated_text, pad_tokens), dim=1)
 
         true_input_ids = inputs["input_ids"]
@@ -291,13 +299,13 @@ def _get_decoded_sequences(
             # Pad true text to max length
             # Pad generated text to max length
             pad_tokens = (
-                    torch.ones(
-                        (true_input_ids.shape[0], max_length - true_input_ids.shape[1]),
-                        dtype=torch.long,
-                        device=true_input_ids.device,
-                        )
-                    * trainer.pad_token_id
-                    )
+                torch.ones(
+                    (true_input_ids.shape[0], max_length - true_input_ids.shape[1]),
+                    dtype=torch.long,
+                    device=true_input_ids.device,
+                )
+                * trainer.pad_token_id
+            )
             true_input_ids = torch.cat((true_input_ids, pad_tokens), dim=1)
 
         all_preds.extend(generated_text.cpu().tolist())
@@ -315,30 +323,35 @@ def format(system_message, instruction, chat_format):
         return system_message + "\n\n" + instruction
 
 
-
 def get_val_datasets():
     from vec2text.data_helpers import dataset_from_args
 
-    embedder_tokenizer=other_tokenizer
-    text_column_name="text"
-    max_seq_length=experiment.model_args.max_seq_length
-    padding=False
+    embedder_tokenizer = other_tokenizer
+    text_column_name = "text"
+    max_seq_length = experiment.model_args.max_seq_length
+    padding = False
     tokenizer = trainer.tokenizer
+
     def tokenize_fn(examples) -> Dict[str, torch.Tensor]:
         if "prefix" not in examples:
             examples["prefix"] = [""] * len(examples[text_column_name])
             examples["suffix"] = examples[text_column_name]
 
         formatted_text = [
-            other_tokenizer.apply_chat_template([{"role":"system", "content":system_message},
-                                                    {"role":"user", "content": instruction}],
-                                            tokenize=False, add_generation_prompt=True)
+            other_tokenizer.apply_chat_template(
+                [
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": instruction},
+                ],
+                tokenize=False,
+                add_generation_prompt=True,
+            )
             for (system_message, instruction) in zip(
                 examples["prefix"], examples["suffix"]
             )
         ]
         output = tokenizer(
-            examples[text_column_name], # dont invert in the chat format
+            examples[text_column_name],  # dont invert in the chat format
             padding=padding,
             truncation=True,
             max_length=max_seq_length,
@@ -373,7 +386,6 @@ def get_val_datasets():
     raw_datasets = dataset_from_args(experiment.data_args)
     val_datasets_dict = load_standard_val_datasets()
     val_datasets_dict["one_million_instructions"] = raw_datasets["validation"]
-    
 
     for name, dataset in val_datasets_dict.items():
         max_eval_samples = min(len(dataset), experiment.data_args.max_eval_samples)
@@ -387,20 +399,18 @@ def get_val_datasets():
 
     ALLOWED_COLUMN_NAMES = {"frozen_embeddings"}
 
-
     for key in val_datasets_dict:
         column_names = list(val_datasets_dict[key].features)
         column_names = [c for c in column_names if c not in ALLOWED_COLUMN_NAMES]
         val_datasets_dict[key] = dataset_map_multi_worker(
-                dataset=val_datasets_dict[key],
-                map_fn=tokenize_fn,
-                batched=True,
-                batch_size=1024,
-                num_proc=get_num_proc(),
-                remove_columns=column_names,
-
-                desc="Running tokenizer on dataset",
-                )
+            dataset=val_datasets_dict[key],
+            map_fn=tokenize_fn,
+            batched=True,
+            batch_size=1024,
+            num_proc=get_num_proc(),
+            remove_columns=column_names,
+            desc="Running tokenizer on dataset",
+        )
 
     val_datasets_dict = val_datasets_dict.filter(lambda ex: ex["length"] > 1)
 
@@ -412,7 +422,7 @@ cmd = "--per_device_train_batch_size 250 --per_device_eval_batch_size 250 --max_
 
 
 parser = transformers.HfArgumentParser(
-(ModelArguments, DataArguments, TrainingArguments)
+    (ModelArguments, DataArguments, TrainingArguments)
 )
 model_args, data_args, training_args = parser.parse_args_into_dataclasses(cmd.split())
 experiment = experiment_from_args(model_args, data_args, training_args)
@@ -422,11 +432,13 @@ model = experiment.load_model()
 
 ckpt = experiment._get_checkpoint()
 print("CKPT", ckpt)
-trainer = experiment.trainer_cls(model=model, data_collator=experiment.get_collator(tokenizer=model.tokenizer), args=experiment.training_args,)
+trainer = experiment.trainer_cls(
+    model=model,
+    data_collator=experiment.get_collator(tokenizer=model.tokenizer),
+    args=experiment.training_args,
+)
 trainer._load_from_checkpoint(ckpt)
 trainer.model.eval()
-
-
 
 
 # other_llm_name = "Qwen/Qwen2.5-7B-Instruct"
@@ -435,28 +447,38 @@ trainer.model.eval()
 # other_llm_name = "meta-llama/Llama-2-7b-chat-hf"
 # other_llm_name = "mistralai/Mistral-7B-Instruct-v0.3"
 other_llm_name = "meta-llama/Llama-2-13b-chat-hf"
-other_llm = AutoModelForCausalLM.from_pretrained(other_llm_name, torch_dtype=torch.bfloat16)
+other_llm = AutoModelForCausalLM.from_pretrained(
+    other_llm_name, torch_dtype=torch.bfloat16
+)
 other_llm.eval()
 other_llm.to(device)
 other_tokenizer = AutoTokenizer.from_pretrained(other_llm_name)
 other_tokenizer.padding_side = "left"
 other_tokenizer.pad_token = other_tokenizer.eos_token
 
-## invert from llama once to set its chosen_tokens
+# invert from llama once to set its chosen_tokens
 output = invert("", "reverse", True)
 print(output)
 
 val_datasets_dict = get_val_datasets()
 metrics = []
 for key in val_datasets_dict:
-    for transform_fn in [optimize_transfer.optimize_transform, optimize_transfer.optimize_transform_matt]:
+    for transform_fn in [
+        optimize_transfer.optimize_transform,
+        optimize_transfer.optimize_transform_matt,
+    ]:
         dl = trainer.get_eval_dataloader(val_datasets_dict[key])
         out = eval_generation_metrics(trainer, dl, transform_fn=transform_fn)
-        metrics.append({"ds":key, "tranform_fn":transform_fn.__name__, "metrics": out,
-            "embedder":other_llm_name})
-    
-import json
-with open(f"transform_metrics_{other_llm_name.replace('/','__')}.json", "w") as f:
+        metrics.append(
+            {
+                "ds": key,
+                "tranform_fn": transform_fn.__name__,
+                "metrics": out,
+                "embedder": other_llm_name,
+            }
+        )
+
+with open(f"transform_metrics_{other_llm_name.replace('/', '__')}.json", "w") as f:
     json.dump(metrics, f, indent=4)
 # val_datasets_dict = load_standard_val_datasets()
 # for name, dataset in val_datasets_dict.items():
@@ -468,4 +490,3 @@ with open(f"transform_metrics_{other_llm_name.replace('/','__')}.json", "w") as 
 #         "idx", range(len(val_datasets_dict[name]))
 #     )
 #     val_datasets_dict[name].set_format("pt")
-

@@ -33,6 +33,7 @@ from vec2text.tokenize_data import (
     embed_dataset_batch,
     tokenize_function,
     tokenize_function_llama_chat,
+    tokenize_generic_chat_models,
 )
 from vec2text.utils import MockEmbedder, dataset_map_multi_worker, get_num_proc
 
@@ -120,6 +121,12 @@ class Experiment(abc.ABC):
             "meta-llama/Llama-2-13b-chat-hf",
             "meta-llama/Llama-2-70b-chat-hf",
             "llama2_chat-random_k-alr",
+        ]
+
+    @property
+    def is_chat_model(self) -> bool:
+        return self.model_args.embedder_model_name in [
+            "llama3_chat-random_k-alr",
         ]
 
     @property
@@ -472,7 +479,13 @@ class Experiment(abc.ABC):
             val_datasets_dict[name].set_format("pt")
 
         tokenize_fn = (
-            tokenize_function_llama_chat if self.is_llama_chat else tokenize_function
+            tokenize_generic_chat_models
+            if self.is_chat_model
+            else (
+                tokenize_function_llama_chat
+                if self.is_llama_chat
+                else tokenize_function
+            )
         )
         for key in val_datasets_dict:
             val_datasets_dict[key] = dataset_map_multi_worker(

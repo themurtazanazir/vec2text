@@ -37,6 +37,7 @@ EMBEDDER_MODEL_NAMES = [
     "llama2-random_k-alr",
     "llama2-random_k-clr",
     "llama2_chat-random_k-alr",
+    "llama3_chat-random_k-alr",
 ]
 
 
@@ -185,6 +186,16 @@ def load_embedder_and_tokenizer(
             from vec2text.embedders.embeddings import Llama2ChatRandomKALREmbedder
 
             model = Llama2ChatRandomKALREmbedder(
+                max_length=kwargs["max_length"],
+                max_new_tokens=kwargs["max_new_tokens"],
+                extra_tokens=kwargs["extra_tokens"],
+                torch_dtype=torch_dtype,
+            )
+            tokenizer = model.tokenizer
+        elif name == "llama3_chat-random_k-alr":
+            from vec2text.embedders.embeddings import Llama3ChatRandomKALREmbedder
+
+            model = Llama3ChatRandomKALREmbedder(
                 max_length=kwargs["max_length"],
                 max_new_tokens=kwargs["max_new_tokens"],
                 extra_tokens=kwargs["extra_tokens"],
