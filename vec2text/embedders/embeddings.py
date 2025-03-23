@@ -61,19 +61,17 @@ class Embedder(nn.Module):
         with torch.no_grad():
             for _ in range(self.max_new_tokens):
                 model_output, hidden_state = self.model(
-                        input_ids=embedder_input_ids,
-                        attention_mask=embedder_attention_mask,
-                        )
+                    input_ids=embedder_input_ids,
+                    attention_mask=embedder_attention_mask,
+                )
 
                 logits = model_output.logits
 
                 p, i = torch.max(logits, dim=-1)
-                next_token = i[
-                    torch.arange(B), embedder_attention_mask.sum(-1) - 1
-                ]
-                embedder_input_ids[
-                    torch.arange(B), embedder_attention_mask.sum(-1)
-                ] = next_token
+                next_token = i[torch.arange(B), embedder_attention_mask.sum(-1) - 1]
+                embedder_input_ids[torch.arange(B), embedder_attention_mask.sum(-1)] = (
+                    next_token
+                )
                 output_states.append(
                     hidden_state[
                         torch.arange(B), embedder_attention_mask.sum(-1) - 1, :
@@ -103,18 +101,71 @@ class GPT2Embedder(Embedder):  # converting to module so device stuff is handled
         return model, tokenizer
 
 
+class TopKToksLogprobsEmbedder(Embedder, ABC):
+
+    def __init__(
+        self,
+        max_length: int,
+        max_new_tokens: int,
+        model,
+        tokenizer,
+    ):
+        self.model = model
+        self.tokenizer = tokenizer
+        self.tokenizer.padding_side = "left"
+        super(Embedder, self).__init__(
+            max_length=max_length,
+            max_new_tokens=max_new_tokens,
+        )
+
+    def load_model_and_tokenizer(self):
+        return self.model, self.tokenizer
+
+    def get_toks_logprobs(
+        self,
+        embedder_input_ids,
+        embedder_attention_mask,
+        top_k,
+    ):
+        device = next(self.model.parameters()).device
+        embedder_input_ids = embedder_input_ids.to(device)
+        embedder_attention_mask = embedder_attention_mask.to(device)
+        output = self.model.generate(
+            input_ids=embedder_input_ids,
+            attention_mask=embedder_attention_mask,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=True,
+            temperature=0.7,
+            pad_token_id=self.tokenizer.pad_token_id,
+            output_scores=True,
+            return_dict_in_generate=True,
+            use_cache=True,
+            top_k=top_k,
+        )
+
+        logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
+        logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
+        topk_logprobs, topk_ids = torch.topk(logprobs, k=top_k, dim=-1)
+        return topk_logprobs, topk_ids
+
+    def __call__(self, *args, **kwargs):
+        self.get_toks_logprobs(*args, **kwargs)
+
+
 class TransformedHiddenStateEmbedder(Embedder, ABC):
 
     def extract_hidden_state_from_logprobs(self, logprobs):
         raise NotImplementedError
 
     def get_hidden_states(self, embedder_input_ids, embedder_attention_mask):
-        logprobs = self.get_logprobs(embedder_input_ids=embedder_input_ids,
-                                     embedder_attention_mask=embedder_attention_mask)
+        logprobs = self.get_logprobs(
+            embedder_input_ids=embedder_input_ids,
+            embedder_attention_mask=embedder_attention_mask,
+        )
         return self.extract_hidden_state_from_logprobs(logprobs)
 
     def get_logprobs(self, embedder_input_ids, embedder_attention_mask):
-        device = next(self.model.parameters()).device 
+        device = next(self.model.parameters()).device
         embedder_input_ids = embedder_input_ids.to(device)
         embedder_attention_mask = embedder_attention_mask.to(device)
         output = self.model.generate(
@@ -127,7 +178,7 @@ class TransformedHiddenStateEmbedder(Embedder, ABC):
             pad_token_id=self.tokenizer.pad_token_id,
             output_scores=True,
             return_dict_in_generate=True,
-            use_cache=True
+            use_cache=True,
         )
 
         ##!!  this part is usually in lms and not in embedder.
@@ -415,6 +466,7 @@ class Llama3ChatRandomKALREmbedder(Llama2KTokensEmbedder):
         alr = logprobs[:, :, 1:] - logprobs[:, :, 0:1]  # B, T, V
         return alr
 
+
 class GPT2RandomKCLREmbedder(GPT2KTokensEmbedder):
 
     def extract_hidden_state_from_logprobs(self, logprobs):
@@ -514,5 +566,6 @@ class Llama2_7BRandomTransformEmbedder(Embedder):
         logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
         logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
         clr = logprobs - torch.mean(logprobs, dim=-1, keepdims=True)  # B, T, V
-        hidden_states = clr[:, :, : (self.config.hidden_size)]  # adding 100 to be safe
+        # adding 100 to be safe
+        hidden_states = clr[:, :, : (self.config.hidden_size)]
         return hidden_states
