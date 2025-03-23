@@ -164,8 +164,7 @@ class Experiment(abc.ABC):
 
         # Log on each process a small summary of training.
         logger.warning(
-            f"Process rank: {training_args.local_rank}, device: {
-                training_args.device}, n_gpu: {training_args.n_gpu}, "
+            f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
             + f"fp16 training: {training_args.fp16}, bf16 training: {training_args.bf16}"
         )
         logger.info(f"Training/evaluation parameters {training_args}")
@@ -229,8 +228,7 @@ class Experiment(abc.ABC):
                 and len(os.listdir(training_args.output_dir)) > 0
             ):
                 raise ValueError(
-                    f"Output directory ({
-                        training_args.output_dir}) already exists and is not empty. "
+                    f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                     "Use --overwrite_output_dir to overcome."
                 )
             elif (
@@ -238,8 +236,7 @@ class Experiment(abc.ABC):
                 and training_args.resume_from_checkpoint is None
             ):
                 logger.info(
-                    f"Checkpoint detected, resuming training at {
-                        last_checkpoint}. To avoid this behavior, change "
+                    f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                     "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
                 )
         checkpoint = None
@@ -431,8 +428,7 @@ class Experiment(abc.ABC):
         ###########################################################################
         if self.model_args.use_frozen_embeddings_as_input:
             print(
-                f"[Precomputing embeddings with batch size: {
-                    self.training_args.per_device_train_batch_size}]"
+                f"[Precomputing embeddings with batch size: {self.training_args.per_device_train_batch_size}]"
             )
             assert torch.cuda.is_available()
             model = model.to(device)
@@ -665,8 +661,7 @@ class InversionExperiment(Experiment):
         )
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(
-            f"Training model with name `{
-                self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
+            f"Training model with name `{self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
         )
 
         if self.training_args.mock_embedder:
@@ -754,8 +749,7 @@ class InversionExperimentNonAutoregressive(Experiment):
         )
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(
-            f"Training model with name `{
-                self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
+            f"Training model with name `{self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
         )
         return vec2text.trainers.InversionTrainerNonAutoregressive(
             model=model,
@@ -785,8 +779,7 @@ class InversionExperimentBagOfWords(Experiment):
         )
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(
-            f"Training model with name `{
-                self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
+            f"Training model with name `{self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
         )
         return vec2text.trainers.InversionTrainerBagOfWords(
             model=model,
