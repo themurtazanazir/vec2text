@@ -128,7 +128,7 @@ class TokensLogProbEncoder(nn.Module):
             torch.arange(byte_embeddings.shape[1])
             .unsqueeze(0)
             .repeat((byte_embeddings.shape[0], 1))
-        )
+        ).to(next(self.parameters()).device)
         pos_emb = self.pos_embedder(pos)
 
         byte_data = byte_data + pos_emb
