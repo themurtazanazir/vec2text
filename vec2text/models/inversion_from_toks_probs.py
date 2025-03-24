@@ -135,8 +135,8 @@ class TokensLogProbEncoder(nn.Module):
                         - len(bytes_batch[sample_idx][timestep_idx][tok_idx])
                     )
 
-        bytes_batch = torch.LongTensor(
-            bytes_batch, device=next(self.parameters()).device
+        bytes_batch = torch.LongTensor(bytes_batch).to(
+            device=next(self.parameters()).device
         )
 
         byte_embeddings = self.byte_embedder(bytes_batch)
