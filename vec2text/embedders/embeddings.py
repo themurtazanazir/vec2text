@@ -109,9 +109,11 @@ class TopKToksLogprobsEmbedder(nn.Module):
         max_new_tokens: int,
         model,
         tokenizer,
+        hidden_size
     ):
         super(TopKToksLogprobsEmbedder, self).__init__()
 
+        self.config = SimpleNamespace(hidden_size=hidden_size)
         self.max_length = max_length
         self.max_new_tokens = max_new_tokens
         self.model = model

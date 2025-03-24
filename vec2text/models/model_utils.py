@@ -138,6 +138,7 @@ def load_embedder_and_tokenizer(
                 max_new_tokens=kwargs["max_new_tokens"],
                 model=model,
                 tokenizer=tokenizer,
+                hidden_size=model.config.n_embd,
             )
             return model, model.tokenizer
 
