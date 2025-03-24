@@ -152,7 +152,7 @@ class TokensLogProbEncoder(nn.Module):
         byte_data = self.final_norm(byte_data)
 
         # Global average pooling
-        # Shape: [B*max_steps*top_k, byte_embedding_dim]
+        # Shape: [B*max_steps*top_k, hidden_dim]
         token_encodings = byte_data.mean(dim=1)
 
         # Shape: [B*max_steps*top_k, hidden_dim]
@@ -180,7 +180,6 @@ class InversionFromToksProbs(InversionModel):
 
         self.token_embedder = TokensLogProbEncoder(
             tokenizer=self.embedder.tokenizer,
-            byte_embedding_dim=64,
             hidden_dim=128,
             max_bytes=20,
             num_heads=8,
