@@ -15,17 +15,17 @@ from vec2text.models.model_utils import load_embedder_and_tokenizer
 class AttentionBlock(nn.Module):
     """Single attention block with residual connections"""
 
-    def __init__(self, embed_dim, num_heads, hidden_dim):
+    def __init__(self, hidden_dim, num_heads, ffn_dim):
         super().__init__()
-        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm1 = nn.LayerNorm(hidden_dim)
         self.self_attention = nn.MultiheadAttention(
-            embed_dim=embed_dim, num_heads=num_heads, batch_first=True
+            embed_dim=hidden_dim, num_heads=num_heads, batch_first=True
         )
-        self.norm2 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(hidden_dim)
         self.feed_forward = nn.Sequential(
-            nn.Linear(embed_dim, hidden_dim),
+            nn.Linear(hidden_dim, ffn_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, embed_dim),
+            nn.Linear(ffn_dim, hidden_dim),
         )
 
     def forward(self, x):
@@ -46,7 +46,6 @@ class TokensLogProbEncoder(nn.Module):
     def __init__(
         self,
         tokenizer,
-        byte_embedding_dim,
         hidden_dim,
         max_bytes,
         num_heads,
@@ -56,28 +55,19 @@ class TokensLogProbEncoder(nn.Module):
         self.tokenizer = tokenizer
         self.hidden_dim = hidden_dim
         self.max_bytes = max_bytes
-        self.byte_embedder = nn.Embedding(256, byte_embedding_dim)
+        self.byte_embedder = nn.Embedding(256, hidden_dim)
 
-        self.byte_encoder = nn.Sequential(
-            nn.Conv1d(byte_embedding_dim, hidden_dim, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),
-            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=3, padding=1),
-            nn.ReLU(),
-            # Global pooling to get fixed-size representation
-            nn.AdaptiveAvgPool1d(1),
-        )
         self.register_buffer(
             "byte_pos_encoding",
-            self._create_positional_encoding(max_bytes, byte_embedding_dim),
+            self._create_positional_encoding(max_bytes, hidden_dim),
         )
 
         self.attention_layers = nn.ModuleList(
             [
                 AttentionBlock(
-                    embed_dim=hidden_dim,
+                    hidden_dim=hidden_dim,
                     num_heads=num_heads,
-                    hidden_dim=4 * hidden_dim,
+                    ffn_dim=4 * hidden_dim,
                 )
                 for _ in range(num_layers)
             ]
@@ -86,7 +76,10 @@ class TokensLogProbEncoder(nn.Module):
         # Final layer norm
         self.final_norm = nn.LayerNorm(hidden_dim)
 
-        self.pooling = nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.Tanh())
+        self.pooling = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Tanh(),
+        )
         self.combiner = nn.Sequential(
             nn.Linear(hidden_dim + 1, hidden_dim),  # +1 for the logprob
             nn.ReLU(),
