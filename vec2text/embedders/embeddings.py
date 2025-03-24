@@ -157,7 +157,7 @@ class TopKToksLogprobsEmbedder(nn.Module):
         return topk_logprobs, topk_ids
 
     def __call__(self, *args, **kwargs):
-        self.get_toks_logprobs(*args, **kwargs)
+        return self.get_toks_logprobs(*args, **kwargs)
 
 
 class TransformedHiddenStateEmbedder(Embedder, ABC):
