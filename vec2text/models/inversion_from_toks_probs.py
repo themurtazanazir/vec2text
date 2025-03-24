@@ -125,9 +125,9 @@ class TokensLogProbEncoder(nn.Module):
         logprobs = topk_logprobs.view(B * max_steps * top_k)
 
         pos = (
-            torch.arange(byte_embeddings.shape[1])
+            torch.arange(byte_data.shape[1])
             .unsqueeze(0)
-            .repeat((byte_embeddings.shape[0], 1))
+            .repeat((byte_data.shape[0], 1))
         ).to(next(self.parameters()).device)
         pos_emb = self.pos_embedder(pos)
 
