@@ -57,10 +57,7 @@ class TokensLogProbEncoder(nn.Module):
         self.max_bytes = max_bytes
         self.byte_embedder = nn.Embedding(256, hidden_dim)
 
-        self.register_buffer(
-            "byte_pos_encoding",
-            self._create_positional_encoding(max_bytes, hidden_dim),
-        )
+        self.pos_embedder = nn.Embedding(max_bytes, hidden_dim)
 
         self.attention_layers = nn.ModuleList(
             [
@@ -88,19 +85,6 @@ class TokensLogProbEncoder(nn.Module):
         )
 
         self.output_projection = nn.Linear(1, 1, bias=False)
-
-    def _create_positional_encoding(self, seq_len, d_model):
-        """Create sinusoidal positional encoding"""
-        position = torch.arange(seq_len).unsqueeze(1).float()
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)
-        )
-
-        pos_encoding = torch.zeros(seq_len, d_model)
-        pos_encoding[:, 0::2] = torch.sin(position * div_term)
-        pos_encoding[:, 1::2] = torch.cos(position * div_term)
-
-        return pos_encoding
 
     def forward(self, topk_toks, topk_logprobs):
 
@@ -140,9 +124,14 @@ class TokensLogProbEncoder(nn.Module):
         byte_data = byte_embeddings.view(B * max_steps * top_k, max_bytes, -1)
         logprobs = topk_logprobs.view(B * max_steps * top_k)
 
-        # Add positional encoding to bytes
-        positions = self.byte_pos_encoding[:max_bytes].unsqueeze(0)
-        byte_data = byte_data + positions
+        pos = (
+            torch.arange(byte_embeddings.shape[1])
+            .unsqueeze(0)
+            .repeat((byte_embeddings.shape[0], 1))
+        )
+        pos_emb = self.pos_embedder(pos)
+
+        byte_data = byte_data + pos_emb
 
         # Process through attention layers
         for layer in self.attention_layers:
