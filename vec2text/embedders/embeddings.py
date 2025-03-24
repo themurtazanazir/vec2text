@@ -101,7 +101,7 @@ class GPT2Embedder(Embedder):  # converting to module so device stuff is handled
         return model, tokenizer
 
 
-class TopKToksLogprobsEmbedder(Embedder, ABC):
+class TopKToksLogprobsEmbedder(nn.Module):
 
     def __init__(
         self,
@@ -110,13 +110,17 @@ class TopKToksLogprobsEmbedder(Embedder, ABC):
         model,
         tokenizer,
     ):
+        super(TopKToksLogprobsEmbedder, self).__init__()
+
+        self.max_length = max_length
+        self.max_new_tokens = max_new_tokens
         self.model = model
         self.tokenizer = tokenizer
         self.tokenizer.padding_side = "left"
-        super(Embedder, self).__init__(
-            max_length=max_length,
-            max_new_tokens=max_new_tokens,
-        )
+
+    def train(self, mode):
+        warnings.warn("Tried to set a mode. This model is permanently set in eval mode")
+        return super().train(mode=False)
 
     def load_model_and_tokenizer(self):
         return self.model, self.tokenizer
