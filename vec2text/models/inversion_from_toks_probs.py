@@ -187,11 +187,11 @@ class InversionFromToksProbs(InversionModel):
 
         self.token_embedder = TokensLogProbEncoder(
             tokenizer=self.embedder.tokenizer,
-            byte_embedding_dim=256,
-            hidden_dim=512,
+            byte_embedding_dim=64,
+            hidden_dim=128,
             max_bytes=20,
             num_heads=8,
-            num_layers=4,
+            num_layers=3,
         )
 
         self.embedding_transform = nn.Sequential(
