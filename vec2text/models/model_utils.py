@@ -119,7 +119,7 @@ def load_embedder_and_tokenizer(
 ):
     # TODO make abstract/argparse for it etc.
     # name = "gpt2" #### <--- TEMP. For debugging. Delete!
-    assert use_hidden_states and use_toks_probs, "Cannot have both on"
+    assert not (use_hidden_states and use_toks_probs), "Cannot have both on"
     model_kwargs = {
         "low_cpu_mem_usage": True,  # Not compatible with DeepSpeed
         "output_hidden_states": False,
