@@ -131,11 +131,13 @@ class TopKToksLogprobsEmbedder(nn.Module):
         self,
         embedder_input_ids,
         embedder_attention_mask,
-        top_k,
+        top_k=None,
     ):
         device = next(self.model.parameters()).device
         embedder_input_ids = embedder_input_ids.to(device)
         embedder_attention_mask = embedder_attention_mask.to(device)
+        if top_k is None:
+            top_k = self.config.hidden_size + 100 # TODO: change it to extra_toks later
         output = self.model.generate(
             input_ids=embedder_input_ids,
             attention_mask=embedder_attention_mask,
