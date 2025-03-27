@@ -213,10 +213,14 @@ class InversionFromToksProbs(InversionModel):
         self,
         embedder_input_ids: Optional[torch.Tensor],
         embedder_attention_mask: Optional[torch.Tensor],
-        frozen_embeddings: Optional[torch.Tensor] = None,
+        frozen_bytes_batch: Optional[torch.Tensor] = None,
+        frozen_topk_logprobs: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if frozen_embeddings is not None:
-            embedder_output = frozen_embeddings
+        if frozen_bytes_batch is not None and frozen_topk_logprobs is not None:
+            embedder_output = {
+                "bytes_batch": frozen_bytes_batch,
+                "topk_logprobs": frozen_topk_logprobs,
+            }
         elif self.embedder_no_grad:
             with torch.no_grad():
                 embedder_output = self.call_embedding_model(
@@ -229,9 +233,9 @@ class InversionFromToksProbs(InversionModel):
                 embedder_attention_mask=embedder_attention_mask,
             )
 
-        topk_logprobs, topk_ids = embedder_output
         embeddings = self.token_embedder(
-            topk_toks=topk_ids, topk_logprobs=topk_logprobs
+            bytes_batch=embedder_output["bytes_batch"],
+            topk_logprobs=embedder_output["topk_logprobs"],
         )
         embeddings = self.embedding_transform(embeddings)
         attention_mask = torch.ones(
@@ -293,7 +297,8 @@ class InversionFromToksProbs(InversionModel):
         embedder_input_ids: torch.Tensor,
         embedder_attention_mask: torch.Tensor,
         labels: Optional[torch.Tensor] = None,
-        frozen_embeddings: Optional[torch.Tensor] = None,
+        frozen_bytes_batch: Optional[torch.Tensor] = None,
+        frozen_topk_logprobs: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         past_key_values: Optional[torch.Tensor] = None,
         **kwargs,

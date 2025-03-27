@@ -16,10 +16,7 @@ def tokenize_function(
 ) -> Callable[[Dict], Dict]:
     def tokenize_function_inner(examples) -> Dict[str, torch.Tensor]:
         if prefix:
-            texts = [
-                f"{prefix}: {text}"
-                for text in examples[text_column_name]
-            ]
+            texts = [f"{prefix}: {text}" for text in examples[text_column_name]]
         else:
             texts = examples[text_column_name]
         output = tokenizer(
@@ -208,10 +205,16 @@ def embed_dataset_batch(model: InversionModel, batch: Dict) -> Dict:
     # ).to(next(model.parameters()).device)
 
     with torch.no_grad():
-        batch["frozen_embeddings"] = model.call_embedding_model(
+        embedding_result = model.call_embedding_model(
             embedder_input_ids=batch["embedder_input_ids"],
             embedder_attention_mask=batch["embedder_attention_mask"],
         )
+
+    if isinstance(embedding_result, dict):
+        for k, v in embedding_result.items():
+            batch[f"frozen_{k}"] = v
+    else:
+        batch["frozen_embeddings"] = embedding_result
     return batch
 
 
