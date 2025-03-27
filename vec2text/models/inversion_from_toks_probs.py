@@ -86,19 +86,29 @@ class TokensLogProbEncoder(nn.Module):
 
         self.output_projection = nn.Linear(1, 1, bias=False)
 
-
     def _process_chunk(self, chunk_bytes, chunk_logprobs):
         """Process a chunk of bytes and logprobs to produce scalar scores."""
         # Embed bytes
         chunk_byte_embeddings = self.byte_embedder(chunk_bytes)
-        chunk_B, chunk_max_steps, chunk_top_k, chunk_max_bytes, _ = chunk_byte_embeddings.shape
+        chunk_B, chunk_max_steps, chunk_top_k, chunk_max_bytes, _ = (
+            chunk_byte_embeddings.shape
+        )
 
         # Reshape for processing
-        chunk_byte_data = chunk_byte_embeddings.reshape(chunk_B * chunk_max_steps * chunk_top_k, chunk_max_bytes, -1)
-        chunk_logprobs_flat = chunk_logprobs.reshape(chunk_B * chunk_max_steps * chunk_top_k)
+        chunk_byte_data = chunk_byte_embeddings.reshape(
+            chunk_B * chunk_max_steps * chunk_top_k, chunk_max_bytes, -1
+        )
+        chunk_logprobs_flat = chunk_logprobs.reshape(
+            chunk_B * chunk_max_steps * chunk_top_k
+        )
 
         # Add positional embeddings
-        pos = torch.arange(chunk_byte_data.shape[1]).unsqueeze(0).repeat((chunk_byte_data.shape[0], 1)).to(chunk_byte_data.device)
+        pos = (
+            torch.arange(chunk_byte_data.shape[1])
+            .unsqueeze(0)
+            .repeat((chunk_byte_data.shape[0], 1))
+            .to(chunk_byte_data.device)
+        )
         pos_emb = self.pos_embedder(pos)
         chunk_byte_data = chunk_byte_data + pos_emb
 
@@ -121,54 +131,30 @@ class TokensLogProbEncoder(nn.Module):
         chunk_scalars = chunk_scalars_flat.view(chunk_B, chunk_max_steps, chunk_top_k)
         return chunk_scalars
 
-    def forward(self, topk_toks, topk_logprobs):
+    def forward(
+        self,
+        bytes_batch,  # B, T, Topk, max_bytes
+        topk_logprobs,  # B, T, Topk
+    ):
 
-        max_bytes_size = 0
-        bytes_batch = []
-        for sample in topk_toks:
-            bytes_sample = []
-            for timestep in sample:
-                texts = self.tokenizer.batch_decode(timestep)
-                bytes_timestep = [
-                    list(i.encode("utf-8"))[: self.max_bytes] for i in texts
-                ]
-                tmp_max_size = max(len(i) for i in bytes_timestep)
-                if max_bytes_size < tmp_max_size:
-                    max_bytes_size = tmp_max_size
-                bytes_sample.append(bytes_timestep)
-            bytes_batch.append(bytes_sample)
-        for sample_idx in range(len(bytes_batch)):
-            for timestep_idx in range(len(bytes_batch[sample_idx])):
-                for tok_idx in range(len(bytes_batch[sample_idx][timestep_idx])):
-                    bytes_batch[sample_idx][timestep_idx][tok_idx] = bytes_batch[
-                        sample_idx
-                    ][timestep_idx][tok_idx] + [0] * (
-                        max_bytes_size
-                        - len(bytes_batch[sample_idx][timestep_idx][tok_idx])
-                    )
-
-        bytes_batch = torch.LongTensor(bytes_batch).to(
-            device=next(self.parameters()).device
+        B, max_steps, top_k = bytes_batch.shape[:3]
+        all_scalars = torch.zeros(
+            (B, max_steps, top_k), device=next(self.parameters()).device
         )
 
-        B, max_steps, top_k = topk_toks.shape[:3]
-        all_scalars = torch.zeros((B, max_steps, top_k), device=next(self.parameters()).device)
-    
         chunk_size = 25  # Adjust based on GPU memory
         for chunk_start in range(0, top_k, chunk_size):
             chunk_end = min(chunk_start + chunk_size, top_k)
-            
+
             # Process this chunk and store results
             chunk_scalars = self._process_chunk(
                 bytes_batch[:, :, chunk_start:chunk_end, :],
-                topk_logprobs[:, :, chunk_start:chunk_end]
+                topk_logprobs[:, :, chunk_start:chunk_end],
             )
-            
-            all_scalars[:, :, chunk_start:chunk_end] = chunk_scalars
-            torch.cuda.empty_cache()
-        
-        return all_scalars
 
+            all_scalars[:, :, chunk_start:chunk_end] = chunk_scalars
+
+        return all_scalars
 
 
 class InversionFromToksProbs(InversionModel):
@@ -189,7 +175,7 @@ class InversionFromToksProbs(InversionModel):
         )
 
         self.embedding_transform = nn.Sequential(
-            nn.Linear(self.embedder_dim+100, bottleneck_dim),
+            nn.Linear(self.embedder_dim + 100, bottleneck_dim),
             nn.Dropout(self.encoder_decoder.config.dropout_rate),
             nn.GELU(),
             nn.Linear(bottleneck_dim, encoder_hidden_dim),

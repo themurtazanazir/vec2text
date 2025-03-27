@@ -109,7 +109,8 @@ class TopKToksLogprobsEmbedder(nn.Module):
         max_new_tokens: int,
         model,
         tokenizer,
-        hidden_size
+        hidden_size,
+        max_bytes=20,
     ):
         super(TopKToksLogprobsEmbedder, self).__init__()
 
@@ -119,6 +120,7 @@ class TopKToksLogprobsEmbedder(nn.Module):
         self.model = model
         self.tokenizer = tokenizer
         self.tokenizer.padding_side = "left"
+        self.max_bytes = max_bytes
 
     def train(self, mode):
         warnings.warn("Tried to set a mode. This model is permanently set in eval mode")
@@ -137,7 +139,7 @@ class TopKToksLogprobsEmbedder(nn.Module):
         embedder_input_ids = embedder_input_ids.to(device)
         embedder_attention_mask = embedder_attention_mask.to(device)
         if top_k is None:
-            top_k = self.config.hidden_size + 100 # TODO: change it to extra_toks later
+            top_k = self.config.hidden_size + 100  # TODO: change it to extra_toks later
         output = self.model.generate(
             input_ids=embedder_input_ids,
             attention_mask=embedder_attention_mask,
@@ -156,8 +158,39 @@ class TopKToksLogprobsEmbedder(nn.Module):
         topk_logprobs, topk_ids = torch.topk(logprobs, k=top_k, dim=-1)
         return topk_logprobs, topk_ids
 
+    def convert_toks_to_bytes(self, tok_ids):
+
+        max_bytes_size = 0
+        bytes_batch = []
+        for sample in tok_ids:
+            bytes_sample = []
+            for timestep in sample:
+                texts = self.tokenizer.batch_decode(timestep)
+                bytes_timestep = [
+                    list(i.encode("utf-8"))[: self.max_bytes] for i in texts
+                ]
+                tmp_max_size = max(len(i) for i in bytes_timestep)
+                if max_bytes_size < tmp_max_size:
+                    max_bytes_size = tmp_max_size
+                bytes_sample.append(bytes_timestep)
+            bytes_batch.append(bytes_sample)
+        for sample_idx in range(len(bytes_batch)):
+            for timestep_idx in range(len(bytes_batch[sample_idx])):
+                for tok_idx in range(len(bytes_batch[sample_idx][timestep_idx])):
+                    bytes_batch[sample_idx][timestep_idx][tok_idx] = bytes_batch[
+                        sample_idx
+                    ][timestep_idx][tok_idx] + [0] * (
+                        max_bytes_size
+                        - len(bytes_batch[sample_idx][timestep_idx][tok_idx])
+                    )
+
+        bytes_batch = torch.LongTensor(bytes_batch)
+        return bytes_batch
+
     def __call__(self, *args, **kwargs):
-        return self.get_toks_logprobs(*args, **kwargs)
+        topk_logprob, topk_ids = self.get_toks_logprobs(*args, **kwargs)
+        bytes_batch = self.convert_toks_to_bytes(topk_ids)
+        return topk_logprob, bytes_batch
 
 
 class TransformedHiddenStateEmbedder(Embedder, ABC):
