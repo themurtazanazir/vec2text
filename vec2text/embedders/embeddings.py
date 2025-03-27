@@ -10,6 +10,7 @@ import transformers
 from vec2text.lms.gpt2 import GPT2WithHidden, GPT2RandomCLRTransform
 from vec2text.lms.llama import LlamaRandomCLRTransform
 from transformers import AutoTokenizer
+import os
 
 
 class Embedder(nn.Module):
@@ -158,34 +159,81 @@ class TopKToksLogprobsEmbedder(nn.Module):
         topk_logprobs, topk_ids = torch.topk(logprobs, k=top_k, dim=-1)
         return topk_logprobs, topk_ids
 
-    def convert_toks_to_bytes(self, tok_ids):
+    # def convert_toks_to_bytes(self, tok_ids: torch.LongTensor):
+    #     batch_size, timesteps, num_tokens = tok_ids.shape
+    #     
+    #     # Process in smaller chunks to avoid memory issues
+    #     chunk_size = 1024  # Adjust based on your memory constraints
+    #     num_items = batch_size * timesteps * num_tokens
+    #     result = torch.zeros(num_items, self.max_bytes, dtype=torch.long, device='cpu')
+    #     tok_ids = tok_ids.reshape(-1).cpu()
+    #     
+    #     # Process in chunks to avoid OOM
+    #     for start_idx in range(0, num_items, chunk_size):
+    #         end_idx = min(start_idx + chunk_size, num_items)
+    #         chunk_tok_ids = tok_ids[start_idx:end_idx]
+    #         
+    #         texts = self.tokenizer.batch_decode(chunk_tok_ids)
+    #         # texts = [tokenizer.backend_tokenizer.decoder.decode([i] for i in tokenizer.convert_ids_to_tokens(chunk_tok_ids)]
+    #         
+    #         # Process texts in parallel using threads
+    #         from concurrent.futures import ThreadPoolExecutor
+    #         
+    #         def process_text(args):
+    #             idx, text = args
+    #             byte_encoded = list(text.encode("utf-8"))[:self.max_bytes]
+    #             return idx, byte_encoded
+    #         
+    #         with ThreadPoolExecutor(max_workers=min(16, os.cpu_count() or 1)) as executor:
+    #             for local_idx, byte_encoded in executor.map(process_text, enumerate(texts)):
+    #                 if byte_encoded:  # Only process if there are bytes
+    #                     global_idx = start_idx + local_idx
+    #                     result[global_idx, :len(byte_encoded)] = torch.tensor(byte_encoded, dtype=torch.long)
+    #     
+    #     # Reshape to original dimensions and move back to original device
+    #     result = result.reshape(batch_size, timesteps, num_tokens, self.max_bytes)
+    #     return result
+    def convert_toks_to_bytes(self, tok_ids: torch.LongTensor):
 
-        max_bytes_size = 0
-        bytes_batch = []
-        for sample in tok_ids:
-            bytes_sample = []
-            for timestep in sample:
-                texts = self.tokenizer.batch_decode(timestep)
-                bytes_timestep = [
-                    list(i.encode("utf-8"))[: self.max_bytes] for i in texts
-                ]
-                tmp_max_size = max(len(i) for i in bytes_timestep)
-                if max_bytes_size < tmp_max_size:
-                    max_bytes_size = tmp_max_size
-                bytes_sample.append(bytes_timestep)
-            bytes_batch.append(bytes_sample)
-        for sample_idx in range(len(bytes_batch)):
-            for timestep_idx in range(len(bytes_batch[sample_idx])):
-                for tok_idx in range(len(bytes_batch[sample_idx][timestep_idx])):
-                    bytes_batch[sample_idx][timestep_idx][tok_idx] = bytes_batch[
-                        sample_idx
-                    ][timestep_idx][tok_idx] + [0] * (
-                        max_bytes_size
-                        - len(bytes_batch[sample_idx][timestep_idx][tok_idx])
-                    )
+        batch_size, timesteps, num_tokens = tok_ids.shape
+        flat_tok_ids = tok_ids.reshape(-1).cpu()
+        # texts = self.tokenizer.batch_decode(flat_tok_ids)
 
-        bytes_batch = torch.LongTensor(bytes_batch)
-        return bytes_batch
+        texts = [self.tokenizer.backend_tokenizer.decoder.decode([i]) for i in self.tokenizer.convert_ids_to_tokens(flat_tok_ids)]
+        result = torch.zeros(batch_size*timesteps*num_tokens, self.max_bytes, dtype=torch.long)
+        for i, text in enumerate(texts):
+            byte_encoded = torch.LongTensor(list(text.encode("utf-8"))[:self.max_bytes])
+            result[i, :len(byte_encoded)] = byte_encoded
+
+        return result.reshape(batch_size, timesteps, num_tokens, self.max_bytes)
+
+
+        # max_bytes_size = 0
+        # bytes_batch = []
+        # for sample in tok_ids:
+        #     bytes_sample = []
+        #     for timestep in sample:
+        #         texts = self.tokenizer.batch_decode(timestep)
+        #         bytes_timestep = [
+        #             list(i.encode("utf-8"))[: self.max_bytes] for i in texts
+        #         ]
+        #         tmp_max_size = max(len(i) for i in bytes_timestep)
+        #         if max_bytes_size < tmp_max_size:
+        #             max_bytes_size = tmp_max_size
+        #         bytes_sample.append(bytes_timestep)
+        #     bytes_batch.append(bytes_sample)
+        # for sample_idx in range(len(bytes_batch)):
+        #     for timestep_idx in range(len(bytes_batch[sample_idx])):
+        #         for tok_idx in range(len(bytes_batch[sample_idx][timestep_idx])):
+        #             bytes_batch[sample_idx][timestep_idx][tok_idx] = bytes_batch[
+        #                 sample_idx
+        #             ][timestep_idx][tok_idx] + [0] * (
+        #                 max_bytes_size
+        #                 - len(bytes_batch[sample_idx][timestep_idx][tok_idx])
+        #             )
+
+        # bytes_batch = torch.LongTensor(bytes_batch)
+        # return bytes_batch
 
     def __call__(self, *args, **kwargs):
         topk_logprob, topk_ids = self.get_toks_logprobs(*args, **kwargs)
