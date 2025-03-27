@@ -64,7 +64,7 @@ class TokensLogProbEncoder(nn.Module):
                 AttentionBlock(
                     hidden_dim=hidden_dim,
                     num_heads=num_heads,
-                    ffn_dim=4 * hidden_dim,
+                    ffn_dim=2 * hidden_dim,
                 )
                 for _ in range(num_layers)
             ]
@@ -74,7 +74,7 @@ class TokensLogProbEncoder(nn.Module):
         self.final_norm = nn.LayerNorm(hidden_dim)
 
         self.pooling = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            # nn.Linear(hidden_dim, hidden_dim),
             nn.Tanh(),
         )
         self.combiner = nn.Sequential(
@@ -85,6 +85,41 @@ class TokensLogProbEncoder(nn.Module):
         )
 
         self.output_projection = nn.Linear(1, 1, bias=False)
+
+
+    def _process_chunk(self, chunk_bytes, chunk_logprobs):
+        """Process a chunk of bytes and logprobs to produce scalar scores."""
+        # Embed bytes
+        chunk_byte_embeddings = self.byte_embedder(chunk_bytes)
+        chunk_B, chunk_max_steps, chunk_top_k, chunk_max_bytes, _ = chunk_byte_embeddings.shape
+
+        # Reshape for processing
+        chunk_byte_data = chunk_byte_embeddings.reshape(chunk_B * chunk_max_steps * chunk_top_k, chunk_max_bytes, -1)
+        chunk_logprobs_flat = chunk_logprobs.reshape(chunk_B * chunk_max_steps * chunk_top_k)
+
+        # Add positional embeddings
+        pos = torch.arange(chunk_byte_data.shape[1]).unsqueeze(0).repeat((chunk_byte_data.shape[0], 1)).to(chunk_byte_data.device)
+        pos_emb = self.pos_embedder(pos)
+        chunk_byte_data = chunk_byte_data + pos_emb
+
+        # Process through attention layers
+        for layer in self.attention_layers:
+            chunk_byte_data = layer(chunk_byte_data)
+
+        # Final processing
+        chunk_byte_data = self.final_norm(chunk_byte_data)
+        chunk_token_encodings = chunk_byte_data.mean(dim=1)
+        chunk_token_encodings = self.pooling(chunk_token_encodings)
+
+        # Combine with logprobs
+        chunk_logprobs_flat = chunk_logprobs_flat.unsqueeze(-1)
+        chunk_combined = torch.cat([chunk_token_encodings, chunk_logprobs_flat], dim=-1)
+        chunk_scalars_flat = self.combiner(chunk_combined)
+        chunk_scalars_flat = self.output_projection(chunk_scalars_flat)
+
+        # Reshape back
+        chunk_scalars = chunk_scalars_flat.view(chunk_B, chunk_max_steps, chunk_top_k)
+        return chunk_scalars
 
     def forward(self, topk_toks, topk_logprobs):
 
@@ -116,46 +151,24 @@ class TokensLogProbEncoder(nn.Module):
             device=next(self.parameters()).device
         )
 
-        byte_embeddings = self.byte_embedder(bytes_batch)
+        B, max_steps, top_k = topk_toks.shape[:3]
+        all_scalars = torch.zeros((B, max_steps, top_k), device=next(self.parameters()).device)
+    
+        chunk_size = 25  # Adjust based on GPU memory
+        for chunk_start in range(0, top_k, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, top_k)
+            
+            # Process this chunk and store results
+            chunk_scalars = self._process_chunk(
+                bytes_batch[:, :, chunk_start:chunk_end, :],
+                topk_logprobs[:, :, chunk_start:chunk_end]
+            )
+            
+            all_scalars[:, :, chunk_start:chunk_end] = chunk_scalars
+            torch.cuda.empty_cache()
+        
+        return all_scalars
 
-        B, max_steps, top_k, max_bytes, _ = byte_embeddings.shape
-
-        # Reshape for processing
-        byte_data = byte_embeddings.view(B * max_steps * top_k, max_bytes, -1)
-        logprobs = topk_logprobs.view(B * max_steps * top_k)
-
-        pos = (
-            torch.arange(byte_data.shape[1])
-            .unsqueeze(0)
-            .repeat((byte_data.shape[0], 1))
-        ).to(next(self.parameters()).device)
-        pos_emb = self.pos_embedder(pos)
-
-        byte_data = byte_data + pos_emb
-
-        # Process through attention layers
-        for layer in self.attention_layers:
-            byte_data = layer(byte_data)
-
-        # Final layer norm
-        byte_data = self.final_norm(byte_data)
-
-        # Global average pooling
-        # Shape: [B*max_steps*top_k, hidden_dim]
-        token_encodings = byte_data.mean(dim=1)
-
-        # Shape: [B*max_steps*top_k, hidden_dim]
-        token_encodings = self.pooling(token_encodings)
-        logprobs = logprobs.unsqueeze(-1)  # Shape: [B*max_steps*top_k, 1]
-        # Shape: [B*max_steps*top_k, hidden_dim+1]
-        combined = torch.cat([token_encodings, logprobs], dim=-1)
-
-        scalars = self.combiner(combined)
-        # Shape: [B*max_steps*top_k, 1]
-        scalars = self.output_projection(scalars)
-
-        scalars = scalars.view(B, max_steps, top_k)
-        return scalars
 
 
 class InversionFromToksProbs(InversionModel):
@@ -169,14 +182,14 @@ class InversionFromToksProbs(InversionModel):
 
         self.token_embedder = TokensLogProbEncoder(
             tokenizer=self.embedder.tokenizer,
-            hidden_dim=32,
+            hidden_dim=64,
             max_bytes=20,
             num_heads=4,
             num_layers=2,
         )
 
         self.embedding_transform = nn.Sequential(
-            nn.Linear(self.token_embedder.hidden_dim, bottleneck_dim),
+            nn.Linear(self.embedder_dim+100, bottleneck_dim),
             nn.Dropout(self.encoder_decoder.config.dropout_rate),
             nn.GELU(),
             nn.Linear(bottleneck_dim, encoder_hidden_dim),
