@@ -225,7 +225,7 @@ def convert_toks_to_bytes(model: InversionModel, batch: Dict) -> Dict:
     assert hasattr(model.embedder, "convert_toks_to_bytes")
 
     batch["frozen_bytes_batch"] = model.embedder.convert_toks_to_bytes(
-        batch.pop("topk_ids")
+        batch.pop("frozen_topk_ids")
     )
 
     return batch
