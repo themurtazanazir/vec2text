@@ -237,8 +237,7 @@ class TopKToksLogprobsEmbedder(nn.Module):
 
     def __call__(self, *args, **kwargs):
         topk_logprob, topk_ids = self.get_toks_logprobs(*args, **kwargs)
-        bytes_batch = self.convert_toks_to_bytes(topk_ids)
-        return {"topk_logprobs": topk_logprob, "bytes_batch": bytes_batch}
+        return {"topk_logprobs": topk_logprob, "topk_ids": topk_ids}
 
 
 class TransformedHiddenStateEmbedder(Embedder, ABC):

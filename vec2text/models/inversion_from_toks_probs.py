@@ -227,12 +227,19 @@ class InversionFromToksProbs(InversionModel):
                     embedder_input_ids=embedder_input_ids,
                     embedder_attention_mask=embedder_attention_mask,
                 )
+
+            embedder_output["bytes_batch"] = self.embedder.convert_toks_to_bytes(
+                embedder_output.pop("topk_ids")
+            )
         else:
             embedder_output = self.call_embedding_model(
                 embedder_input_ids=embedder_input_ids,
                 embedder_attention_mask=embedder_attention_mask,
             )
 
+            embedder_output["bytes_batch"] = self.embedder.convert_toks_to_bytes(
+                embedder_output.pop("topk_ids")
+            )
         embeddings = self.token_embedder(
             bytes_batch=embedder_output["bytes_batch"],
             topk_logprobs=embedder_output["topk_logprobs"],

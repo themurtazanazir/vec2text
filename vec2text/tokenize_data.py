@@ -16,7 +16,10 @@ def tokenize_function(
 ) -> Callable[[Dict], Dict]:
     def tokenize_function_inner(examples) -> Dict[str, torch.Tensor]:
         if prefix:
-            texts = [f"{prefix}: {text}" for text in examples[text_column_name]]
+            texts = [
+                f"{prefix}: {text}"
+                for text in examples[text_column_name]
+            ]
         else:
             texts = examples[text_column_name]
         output = tokenizer(
@@ -215,6 +218,16 @@ def embed_dataset_batch(model: InversionModel, batch: Dict) -> Dict:
             batch[f"frozen_{k}"] = v
     else:
         batch["frozen_embeddings"] = embedding_result
+    return batch
+
+
+def convert_toks_to_bytes(model: InversionModel, batch: Dict) -> Dict:
+    assert hasattr(model.embedder, "convert_toks_to_bytes")
+
+    batch["frozen_bytes_batch"] = model.embedder.convert_toks_to_bytes(
+        batch.pop("topk_ids")
+    )
+
     return batch
 
 
