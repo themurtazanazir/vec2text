@@ -315,7 +315,8 @@ class InversionFromToksProbs(InversionModel):
         inputs_embeds, attention_mask = self.embed_and_project(
             embedder_input_ids=embedder_input_ids,
             embedder_attention_mask=embedder_attention_mask,
-            frozen_embeddings=frozen_embeddings,
+            frozen_bytes_batch=frozen_bytes_batch,
+            frozen_topk_logprobs=frozen_topk_logprobs,
         )
         return self.encoder_decoder(
             inputs_embeds=inputs_embeds,

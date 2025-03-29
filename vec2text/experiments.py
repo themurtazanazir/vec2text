@@ -790,7 +790,7 @@ class InversionFromTopKLogProbsExperiment(InversionFromLogitsExperiment):
                     new_fingerprint=(
                         d._fingerprint + md5_hash_kwargs(**self.dataset_kwargs) + ""
                     ),
-                    num_proc=get_num_proc(),
+                    num_proc=1,
                 )
             val_datasets_dict = datasets.DatasetDict(new_tokenized_datasets)
         return val_datasets_dict
