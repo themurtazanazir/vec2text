@@ -142,7 +142,7 @@ class TokensLogProbEncoder(nn.Module):
             (B, max_steps, top_k), device=next(self.parameters()).device
         )
 
-        chunk_size = 25  # Adjust based on GPU memory
+        chunk_size = 868  # Adjust based on GPU memory
         for chunk_start in range(0, top_k, chunk_size):
             chunk_end = min(chunk_start + chunk_size, top_k)
 
@@ -180,11 +180,31 @@ class InversionFromToksProbs(InversionModel):
             nn.GELU(),
             nn.Linear(bottleneck_dim, encoder_hidden_dim),
         )
+        self.register_buffer("token2bytes", self.create_byte_embedding())
 
-        self._emb_top_p = None
-        self._emb_top_k = None
-        self._emb_temp = None
-        self._softmax_in_log_space = True
+    def create_byte_embedding(self, max_bytes=20):
+        tokenizer = self.embedder_tokenizer
+        vocab_size = tokenizer.vocab_size
+
+        # Initialize embedding tensor
+        byte_embedding = torch.zeros((vocab_size, max_bytes), dtype=torch.int32)
+
+        # Fill embedding with byte values for each token
+        for token_id in range(vocab_size):
+            try:
+                token_str = tokenizer.decode([token_id])
+                token_bytes = token_str.encode('utf-8')
+
+                # Convert bytes to tensor and store in embedding
+                byte_len = min(len(token_bytes), max_bytes)
+                byte_values = torch.tensor([int(b) for b in token_bytes[:byte_len]],
+                                           dtype=torch.int32)
+
+                byte_embedding[token_id, :byte_len] = byte_values
+            except Exception as e:
+                print(f"Error processing token ID {token_id}: {e}")
+
+        return byte_embedding
 
     def load_embedder_and_tokenizer(self, config):
         return load_embedder_and_tokenizer(
@@ -213,12 +233,12 @@ class InversionFromToksProbs(InversionModel):
         self,
         embedder_input_ids: Optional[torch.Tensor],
         embedder_attention_mask: Optional[torch.Tensor],
-        frozen_bytes_batch: Optional[torch.Tensor] = None,
+        frozen_topk_ids: Optional[torch.Tensor] = None,
         frozen_topk_logprobs: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if frozen_bytes_batch is not None and frozen_topk_logprobs is not None:
+        if frozen_topk_ids is not None and frozen_topk_logprobs is not None:
             embedder_output = {
-                "bytes_batch": frozen_bytes_batch,
+                "topk_ids": frozen_topk_ids,
                 "topk_logprobs": frozen_topk_logprobs,
             }
         elif self.embedder_no_grad:
@@ -228,20 +248,20 @@ class InversionFromToksProbs(InversionModel):
                     embedder_attention_mask=embedder_attention_mask,
                 )
 
-            embedder_output["bytes_batch"] = self.embedder.convert_toks_to_bytes(
-                embedder_output.pop("topk_ids")
-            )
         else:
             embedder_output = self.call_embedding_model(
                 embedder_input_ids=embedder_input_ids,
                 embedder_attention_mask=embedder_attention_mask,
             )
 
-            embedder_output["bytes_batch"] = self.embedder.convert_toks_to_bytes(
-                embedder_output.pop("topk_ids")
-            )
+        topk_ids = embedder_output["topk_ids"] # B, T, topk
+        B, T, topk = topk_ids.shape 
+        flattened_ids = topk_ids.view(-1)
+        byte_ids = self.token2bytes[flattened_ids]
+        byte_ids = byte_ids.view(B, T, topk, -1)
+
         embeddings = self.token_embedder(
-            bytes_batch=embedder_output["bytes_batch"],
+            bytes_batch=byte_ids,
             topk_logprobs=embedder_output["topk_logprobs"],
         )
         embeddings = self.embedding_transform(embeddings)
@@ -273,7 +293,9 @@ class InversionFromToksProbs(InversionModel):
         inputs_embeds, attention_mask = self.embed_and_project(
             embedder_input_ids=inputs.get("embedder_input_ids"),
             embedder_attention_mask=inputs.get("embedder_attention_mask"),
-            frozen_embeddings=inputs.get("frozen_embeddings"),
+            frozen_bytes_batch=inputs.get("frozen_bytes_batch"),
+            frozen_topk_logprobs=inputs.get("frozen_topk_logprobs"),
+
         )
 
         if "decoder_input_ids" in inputs:
