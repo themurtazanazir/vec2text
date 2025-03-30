@@ -720,183 +720,183 @@ class InversionFromTopKLogProbsExperiment(InversionFromLogitsExperiment):
     def load_model(self) -> transformers.PreTrainedModel:
         return InversionFromToksProbs(config=self.config)
 
-    def _prepare_val_datasets_dict(
-        self,
-        model: transformers.PreTrainedModel,
-        tokenizer: transformers.AutoTokenizer,
-        embedder_tokenizer: transformers.AutoTokenizer,
-        val_datasets_dict: datasets.DatasetDict,
-    ) -> datasets.DatasetDict:
-        for name, dataset in val_datasets_dict.items():
-            max_eval_samples = min(len(dataset), self.data_args.max_eval_samples)
-            val_datasets_dict[name] = val_datasets_dict[name].select(
-                range(max_eval_samples)
-            )
-            val_datasets_dict[name] = val_datasets_dict[name].add_column(
-                "idx", range(len(val_datasets_dict[name]))
-            )
-            val_datasets_dict[name].set_format("pt")
-
-        tokenize_fn = (
-            tokenize_generic_chat_models
-            if self.is_chat_model
-            else (
-                tokenize_function_llama_chat
-                if self.is_llama_chat
-                else tokenize_function
-            )
-        )
-        for key in val_datasets_dict:
-            val_datasets_dict[key] = dataset_map_multi_worker(
-                dataset=val_datasets_dict[key],
-                map_fn=tokenize_fn(
-                    tokenizer=tokenizer,
-                    embedder_tokenizer=embedder_tokenizer,
-                    text_column_name="text",
-                    max_seq_length=self.model_args.max_seq_length,
-                    padding=False,
-                ),
-                remove_columns=["text"],
-                batched=True,
-                batch_size=1024,
-                num_proc=get_num_proc(),
-                desc="Running tokenizer on dataset",
-            )
-
-        # filter out empty examples (these exist for xsum documents).
-        val_datasets_dict = val_datasets_dict.filter(lambda ex: ex["length"] > 1)
-
-        if self.model_args.use_frozen_embeddings_as_input:
-            assert torch.cuda.is_available()
-            model = model.to(device)
-
-            new_tokenized_datasets = {}
-            for key, d in val_datasets_dict.items():
-                new_tokenized_datasets[key] = dataset_map_multi_worker(
-                    dataset=d,
-                    map_fn=functools.partial(embed_dataset_batch, model),
-                    batched=True,
-                    batch_size=self.training_args.per_device_train_batch_size,
-                    new_fingerprint=(
-                        d._fingerprint + md5_hash_kwargs(**self.dataset_kwargs) + ""
-                    ),
-                    num_proc=1,
-                )
-                new_tokenized_datasets[key] = dataset_map_multi_worker(
-                    dataset=new_tokenized_datasets[key],
-                    map_fn=functools.partial(convert_toks_to_bytes, model),
-                    batched=True,
-                    batch_size=2048,
-                    new_fingerprint=(
-                        d._fingerprint + md5_hash_kwargs(**self.dataset_kwargs) + ""
-                    ),
-                    num_proc=1,
-                )
-            val_datasets_dict = datasets.DatasetDict(new_tokenized_datasets)
-        return val_datasets_dict
-
-    def _load_train_dataset_uncached(
-        self,
-        model: transformers.PreTrainedModel,
-        tokenizer: transformers.AutoTokenizer,
-        embedder_tokenizer: transformers.AutoTokenizer,
-    ) -> datasets.DatasetDict:
-        data_args = self.data_args
-        ###########################################################################
-        # Load datasets
-        logger.info("Loading dataset '%s'...", self.data_args.dataset_name)
-        raw_datasets = dataset_from_args(self.data_args)
-
-        # Remove extra features except for 'frozen_embeddings' which could be embeddings
-        # saved to disk.
-        column_names = list(raw_datasets["train"].features)
-        ALLOWED_COLUMN_NAMES = {"frozen_embeddings"}
-        column_names = [c for c in column_names if c not in ALLOWED_COLUMN_NAMES]
-
-        # this argument allows us to *train* on less data (for example 1% of our training set).
-        if data_args.use_less_data and (data_args.use_less_data > 0):
-            for key in raw_datasets:
-                new_length = min(len(raw_datasets[key]), data_args.use_less_data)
-                raw_datasets[key] = raw_datasets[key].select(range(new_length))
-        print(
-            ">> using fast tokenizers:", tokenizer.is_fast, embedder_tokenizer.is_fast
-        )
-
-        tokenize_fn = (
-            tokenize_function_llama_chat if self.is_llama_chat else tokenize_function
-        )
-        for key in raw_datasets:
-            raw_datasets[key] = dataset_map_multi_worker(
-                dataset=raw_datasets[key],
-                map_fn=tokenize_fn(
-                    tokenizer,
-                    embedder_tokenizer,
-                    "text",
-                    self.model_args.max_seq_length,
-                    padding=False,
-                    prefix=(
-                        "search_document"
-                        if self.model_args.embedder_model_name
-                        == "nomic-ai/nomic-embed-text-v1"
-                        else None
-                    ),
-                ),
-                batched=True,
-                num_proc=get_num_proc(),
-                remove_columns=column_names,
-                desc="Running tokenizer on dataset",
-            )
-        tokenized_datasets = raw_datasets
-        ###########################################################################
-        for key in tokenized_datasets:
-            tokenized_datasets[key].set_format("pt")
-        tokenized_datasets["train"] = tokenized_datasets["train"].add_column(
-            "idx", range(len(tokenized_datasets["train"]))
-        )
-        ###########################################################################
-        if self.model_args.use_frozen_embeddings_as_input:
-            print(
-                f"[Precomputing embeddings with batch size: {self.training_args.per_device_train_batch_size}]"
-            )
-            assert torch.cuda.is_available()
-            model = model.to(device)
-
-            new_tokenized_datasets = {}
-            for key, d in tokenized_datasets.items():
-                new_fingerprint = (
-                    d._fingerprint + md5_hash_kwargs(**self.dataset_kwargs) + ""
-                )
-                print("\tsaving precomputed embeddings to file:", new_fingerprint)
-                new_tokenized_datasets[key] = dataset_map_multi_worker(
-                    dataset=d,
-                    map_fn=functools.partial(embed_dataset_batch, model),
-                    batched=True,
-                    batch_size=self.training_args.per_device_train_batch_size,
-                    new_fingerprint=new_fingerprint,
-                    num_proc=1,
-                )
-                new_tokenized_datasets[key] = dataset_map_multi_worker(
-                    dataset=new_tokenized_datasets[key],
-                    map_fn=functools.partial(convert_toks_to_bytes, model),
-                    batched=True,
-                    batch_size=self.training_args.per_device_train_batch_size,
-                    new_fingerprint=new_fingerprint,
-                    num_proc=1,
-                )
-            tokenized_datasets = datasets.DatasetDict(new_tokenized_datasets)
-        ###########################################################################
-        max_eval_samples = min(
-            len(tokenized_datasets["validation"]), self.data_args.max_eval_samples
-        )
-        tokenized_datasets["validation"] = tokenized_datasets["validation"].select(
-            range(max_eval_samples)
-        )
-        tokenized_datasets["validation"] = tokenized_datasets["validation"].add_column(
-            "idx", range(len(tokenized_datasets["validation"]))
-        )
-        tokenized_datasets["validation"].set_format("pt")
-        ###########################################################################
-        return tokenized_datasets
+#     def _prepare_val_datasets_dict(
+#         self,
+#         model: transformers.PreTrainedModel,
+#         tokenizer: transformers.AutoTokenizer,
+#         embedder_tokenizer: transformers.AutoTokenizer,
+#         val_datasets_dict: datasets.DatasetDict,
+#     ) -> datasets.DatasetDict:
+#         for name, dataset in val_datasets_dict.items():
+#             max_eval_samples = min(len(dataset), self.data_args.max_eval_samples)
+#             val_datasets_dict[name] = val_datasets_dict[name].select(
+#                 range(max_eval_samples)
+#             )
+#             val_datasets_dict[name] = val_datasets_dict[name].add_column(
+#                 "idx", range(len(val_datasets_dict[name]))
+#             )
+#             val_datasets_dict[name].set_format("pt")
+# 
+#         tokenize_fn = (
+#             tokenize_generic_chat_models
+#             if self.is_chat_model
+#             else (
+#                 tokenize_function_llama_chat
+#                 if self.is_llama_chat
+#                 else tokenize_function
+#             )
+#         )
+#         for key in val_datasets_dict:
+#             val_datasets_dict[key] = dataset_map_multi_worker(
+#                 dataset=val_datasets_dict[key],
+#                 map_fn=tokenize_fn(
+#                     tokenizer=tokenizer,
+#                     embedder_tokenizer=embedder_tokenizer,
+#                     text_column_name="text",
+#                     max_seq_length=self.model_args.max_seq_length,
+#                     padding=False,
+#                 ),
+#                 remove_columns=["text"],
+#                 batched=True,
+#                 batch_size=1024,
+#                 num_proc=get_num_proc(),
+#                 desc="Running tokenizer on dataset",
+#             )
+# 
+#         # filter out empty examples (these exist for xsum documents).
+#         val_datasets_dict = val_datasets_dict.filter(lambda ex: ex["length"] > 1)
+# 
+#         if self.model_args.use_frozen_embeddings_as_input:
+#             assert torch.cuda.is_available()
+#             model = model.to(device)
+# 
+#             new_tokenized_datasets = {}
+#             for key, d in val_datasets_dict.items():
+#                 new_tokenized_datasets[key] = dataset_map_multi_worker(
+#                     dataset=d,
+#                     map_fn=functools.partial(embed_dataset_batch, model),
+#                     batched=True,
+#                     batch_size=self.training_args.per_device_train_batch_size,
+#                     new_fingerprint=(
+#                         d._fingerprint + md5_hash_kwargs(**self.dataset_kwargs) + ""
+#                     ),
+#                     num_proc=1,
+#                 )
+#                 new_tokenized_datasets[key] = dataset_map_multi_worker(
+#                     dataset=new_tokenized_datasets[key],
+#                     map_fn=functools.partial(convert_toks_to_bytes, model),
+#                     batched=True,
+#                     batch_size=2048,
+#                     new_fingerprint=(
+#                         d._fingerprint + md5_hash_kwargs(**self.dataset_kwargs) + ""
+#                     ),
+#                     num_proc=1,
+#                 )
+#             val_datasets_dict = datasets.DatasetDict(new_tokenized_datasets)
+#         return val_datasets_dict
+# 
+#     def _load_train_dataset_uncached(
+#         self,
+#         model: transformers.PreTrainedModel,
+#         tokenizer: transformers.AutoTokenizer,
+#         embedder_tokenizer: transformers.AutoTokenizer,
+#     ) -> datasets.DatasetDict:
+#         data_args = self.data_args
+#         ###########################################################################
+#         # Load datasets
+#         logger.info("Loading dataset '%s'...", self.data_args.dataset_name)
+#         raw_datasets = dataset_from_args(self.data_args)
+# 
+#         # Remove extra features except for 'frozen_embeddings' which could be embeddings
+#         # saved to disk.
+#         column_names = list(raw_datasets["train"].features)
+#         ALLOWED_COLUMN_NAMES = {"frozen_embeddings"}
+#         column_names = [c for c in column_names if c not in ALLOWED_COLUMN_NAMES]
+# 
+#         # this argument allows us to *train* on less data (for example 1% of our training set).
+#         if data_args.use_less_data and (data_args.use_less_data > 0):
+#             for key in raw_datasets:
+#                 new_length = min(len(raw_datasets[key]), data_args.use_less_data)
+#                 raw_datasets[key] = raw_datasets[key].select(range(new_length))
+#         print(
+#             ">> using fast tokenizers:", tokenizer.is_fast, embedder_tokenizer.is_fast
+#         )
+# 
+#         tokenize_fn = (
+#             tokenize_function_llama_chat if self.is_llama_chat else tokenize_function
+#         )
+#         for key in raw_datasets:
+#             raw_datasets[key] = dataset_map_multi_worker(
+#                 dataset=raw_datasets[key],
+#                 map_fn=tokenize_fn(
+#                     tokenizer,
+#                     embedder_tokenizer,
+#                     "text",
+#                     self.model_args.max_seq_length,
+#                     padding=False,
+#                     prefix=(
+#                         "search_document"
+#                         if self.model_args.embedder_model_name
+#                         == "nomic-ai/nomic-embed-text-v1"
+#                         else None
+#                     ),
+#                 ),
+#                 batched=True,
+#                 num_proc=get_num_proc(),
+#                 remove_columns=column_names,
+#                 desc="Running tokenizer on dataset",
+#             )
+#         tokenized_datasets = raw_datasets
+#         ###########################################################################
+#         for key in tokenized_datasets:
+#             tokenized_datasets[key].set_format("pt")
+#         tokenized_datasets["train"] = tokenized_datasets["train"].add_column(
+#             "idx", range(len(tokenized_datasets["train"]))
+#         )
+#         ###########################################################################
+#         if self.model_args.use_frozen_embeddings_as_input:
+#             print(
+#                 f"[Precomputing embeddings with batch size: {self.training_args.per_device_train_batch_size}]"
+#             )
+#             assert torch.cuda.is_available()
+#             model = model.to(device)
+# 
+#             new_tokenized_datasets = {}
+#             for key, d in tokenized_datasets.items():
+#                 new_fingerprint = (
+#                     d._fingerprint + md5_hash_kwargs(**self.dataset_kwargs) + ""
+#                 )
+#                 print("\tsaving precomputed embeddings to file:", new_fingerprint)
+#                 new_tokenized_datasets[key] = dataset_map_multi_worker(
+#                     dataset=d,
+#                     map_fn=functools.partial(embed_dataset_batch, model),
+#                     batched=True,
+#                     batch_size=self.training_args.per_device_train_batch_size,
+#                     new_fingerprint=new_fingerprint,
+#                     num_proc=1,
+#                 )
+#                 new_tokenized_datasets[key] = dataset_map_multi_worker(
+#                     dataset=new_tokenized_datasets[key],
+#                     map_fn=functools.partial(convert_toks_to_bytes, model),
+#                     batched=True,
+#                     batch_size=self.training_args.per_device_train_batch_size,
+#                     new_fingerprint=new_fingerprint,
+#                     num_proc=1,
+#                 )
+#             tokenized_datasets = datasets.DatasetDict(new_tokenized_datasets)
+#         ###########################################################################
+#         max_eval_samples = min(
+#             len(tokenized_datasets["validation"]), self.data_args.max_eval_samples
+#         )
+#         tokenized_datasets["validation"] = tokenized_datasets["validation"].select(
+#             range(max_eval_samples)
+#         )
+#         tokenized_datasets["validation"] = tokenized_datasets["validation"].add_column(
+#             "idx", range(len(tokenized_datasets["validation"]))
+#         )
+#         tokenized_datasets["validation"].set_format("pt")
+#         ###########################################################################
+#         return tokenized_datasets
 
 
 class ReverseInversionFromHiddenStatesExperiment(InversionFromLogitsExperiment):
