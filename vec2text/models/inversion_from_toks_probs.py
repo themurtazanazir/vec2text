@@ -293,7 +293,7 @@ class InversionFromToksProbs(InversionModel):
         inputs_embeds, attention_mask = self.embed_and_project(
             embedder_input_ids=inputs.get("embedder_input_ids"),
             embedder_attention_mask=inputs.get("embedder_attention_mask"),
-            frozen_bytes_batch=inputs.get("frozen_bytes_batch"),
+            frozen_topk_ids=inputs.get("frozen_topk_ids"),
             frozen_topk_logprobs=inputs.get("frozen_topk_logprobs"),
 
         )
@@ -326,7 +326,7 @@ class InversionFromToksProbs(InversionModel):
         embedder_input_ids: torch.Tensor,
         embedder_attention_mask: torch.Tensor,
         labels: Optional[torch.Tensor] = None,
-        frozen_bytes_batch: Optional[torch.Tensor] = None,
+        frozen_topk_ids: Optional[torch.Tensor] = None,
         frozen_topk_logprobs: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         past_key_values: Optional[torch.Tensor] = None,
@@ -337,7 +337,7 @@ class InversionFromToksProbs(InversionModel):
         inputs_embeds, attention_mask = self.embed_and_project(
             embedder_input_ids=embedder_input_ids,
             embedder_attention_mask=embedder_attention_mask,
-            frozen_bytes_batch=frozen_bytes_batch,
+            frozen_topk_ids=frozen_topk_ids,
             frozen_topk_logprobs=frozen_topk_logprobs,
         )
         return self.encoder_decoder(
