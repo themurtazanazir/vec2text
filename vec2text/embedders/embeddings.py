@@ -157,6 +157,7 @@ class TopKToksLogprobsEmbedder(nn.Module):
         logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
         logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
         topk_logprobs, topk_ids = torch.topk(logprobs, k=top_k, dim=-1)
+        topk_logprobs = topk_logprobs - topk_logprobs.mean(-1, keepdims=True)
         return topk_logprobs, topk_ids
 
     # def convert_toks_to_bytes(self, tok_ids: torch.LongTensor):
