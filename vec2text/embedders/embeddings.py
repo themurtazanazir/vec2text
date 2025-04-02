@@ -115,7 +115,7 @@ class TopKToksLogprobsEmbedder(nn.Module):
     ):
         super(TopKToksLogprobsEmbedder, self).__init__()
 
-        self.config = SimpleNamespace(hidden_size=hidden_size)
+        self.config = SimpleNamespace(hidden_size=32)
         self.max_length = max_length
         self.max_new_tokens = max_new_tokens
         self.model = model
@@ -145,7 +145,7 @@ class TopKToksLogprobsEmbedder(nn.Module):
             input_ids=embedder_input_ids,
             attention_mask=embedder_attention_mask,
             max_new_tokens=self.max_new_tokens,
-            do_sample=True,
+            do_sample=False,
             temperature=0.7,
             pad_token_id=self.tokenizer.pad_token_id,
             output_scores=True,
