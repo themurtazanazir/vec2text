@@ -144,7 +144,7 @@ class TopKToksLogprobsEmbedder(nn.Module):
             input_ids=embedder_input_ids,
             attention_mask=embedder_attention_mask,
             max_new_tokens=self.max_new_tokens,
-            do_sample=False,
+            do_sample=True,
             temperature=0.7,
             pad_token_id=self.tokenizer.pad_token_id,
             output_scores=True,
@@ -156,7 +156,7 @@ class TopKToksLogprobsEmbedder(nn.Module):
         logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
         logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
         topk_logprobs, topk_ids = torch.topk(logprobs, k=top_k, dim=-1)
-        topk_logprobs = topk_logprobs - topk_logprobs.mean(-1, keepdims=True)
+        # topk_logprobs = topk_logprobs - topk_logprobs.mean(-1, keepdims=True)
         return topk_logprobs, topk_ids
 
     def __call__(self, *args, **kwargs):
