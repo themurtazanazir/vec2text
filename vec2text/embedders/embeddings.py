@@ -110,7 +110,6 @@ class TopKToksLogprobsEmbedder(nn.Module):
         max_new_tokens: int,
         model,
         tokenizer,
-        max_bytes,
         extra_tokens,
         hidden_size,
     ):
@@ -122,7 +121,6 @@ class TopKToksLogprobsEmbedder(nn.Module):
         self.model = model
         self.tokenizer = tokenizer
         self.tokenizer.padding_side = "left"
-        self.max_bytes = max_bytes
 
     def train(self, mode):
         warnings.warn("Tried to set a mode. This model is permanently set in eval mode")
