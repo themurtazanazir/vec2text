@@ -32,7 +32,7 @@ class ModelArguments:
 
     model_name_or_path: str = field(
         ###
-        ## huggingface.co/facebook/dpr-ctx_encoder-single-nq-base
+        # huggingface.co/facebook/dpr-ctx_encoder-single-nq-base
         ###
         default="t5-base",
         metadata={
@@ -43,7 +43,7 @@ class ModelArguments:
     )
     embedder_model_name: str = field(
         ###
-        ## huggingface.co/facebook/dpr-ctx_encoder-single-nq-base
+        # huggingface.co/facebook/dpr-ctx_encoder-single-nq-base
         ###
         default="gtr_base",
         metadata={
@@ -122,10 +122,17 @@ class ModelArguments:
         default=128, metadata={"help": "Maximum sequence length for tokenizer"}
     )
     max_new_tokens: int = field(
-        default=42, metadata={"help": "Maximum new tokens to generate for hidden states"}
+        default=42,
+        metadata={"help": "Maximum new tokens to generate for hidden states"},
     )
     extra_tokens: int = field(
         default=-1, metadata={"help": "Extra tokens to sample in `random_k` embedders"}
+    )
+    hidden_size: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "The number of tokens to use for logprobs. Defaults to embedder's hidden size"
+        },
     )
     torch_dtype: Optional[str] = field(
         default=None,

@@ -165,8 +165,11 @@ class Experiment(abc.ABC):
 
         # Log on each process a small summary of training.
         logger.warning(
-            f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
-            + f"fp16 training: {training_args.fp16}, bf16 training: {training_args.bf16}"
+            f"Process rank: {training_args.local_rank},"
+            f" device: {training_args.device}"
+            f", n_gpu: {training_args.n_gpu}, "
+            f"fp16 training: {training_args.fp16}, "
+            f"bf16 training: {training_args.bf16}"
         )
         logger.info(f"Training/evaluation parameters {training_args}")
 
@@ -232,7 +235,8 @@ class Experiment(abc.ABC):
                 and len(os.listdir(training_args.output_dir)) > 0
             ):
                 raise ValueError(
-                    f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                    f"Output directory ({training_args.output_dir})"
+                    " already exists and is not empty. "
                     "Use --overwrite_output_dir to overcome."
                 )
             elif (
@@ -240,7 +244,9 @@ class Experiment(abc.ABC):
                 and training_args.resume_from_checkpoint is None
             ):
                 logger.info(
-                    f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+                    "Checkpoint detected, "
+                    f"resuming training at {last_checkpoint}."
+                    "To avoid this behavior, change "
                     "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
                 )
         checkpoint = None
@@ -572,6 +578,10 @@ class Experiment(abc.ABC):
             dataset_kwargs["max_new_tokens"] = self.model_args.max_new_tokens
         if self.model_args.extra_tokens >= 0:
             dataset_kwargs["extra_tokens"] = self.model_args.extra_tokens
+        if self.model_args.hidden_size:
+            dataset_kwargs["extra_tokens"] = self.model_args.hidden_size
+        if self.training_args.experiment in ["inversion_from_topk_logprobs"]:
+            dataset_kwargs["experiment"] = self.training_args.experiment
 
         # os.environ["TOKENIZERS_PARALLELISM"] = "True"
         print(
@@ -720,6 +730,7 @@ class InversionFromTopKLogProbsExperiment(InversionFromLogitsExperiment):
     def load_model(self) -> transformers.PreTrainedModel:
         return InversionFromToksProbs(config=self.config)
 
+
 #     def _prepare_val_datasets_dict(
 #         self,
 #         model: transformers.PreTrainedModel,
@@ -736,7 +747,7 @@ class InversionFromTopKLogProbsExperiment(InversionFromLogitsExperiment):
 #                 "idx", range(len(val_datasets_dict[name]))
 #             )
 #             val_datasets_dict[name].set_format("pt")
-# 
+#
 #         tokenize_fn = (
 #             tokenize_generic_chat_models
 #             if self.is_chat_model
@@ -762,14 +773,14 @@ class InversionFromTopKLogProbsExperiment(InversionFromLogitsExperiment):
 #                 num_proc=get_num_proc(),
 #                 desc="Running tokenizer on dataset",
 #             )
-# 
+#
 #         # filter out empty examples (these exist for xsum documents).
 #         val_datasets_dict = val_datasets_dict.filter(lambda ex: ex["length"] > 1)
-# 
+#
 #         if self.model_args.use_frozen_embeddings_as_input:
 #             assert torch.cuda.is_available()
 #             model = model.to(device)
-# 
+#
 #             new_tokenized_datasets = {}
 #             for key, d in val_datasets_dict.items():
 #                 new_tokenized_datasets[key] = dataset_map_multi_worker(
@@ -794,7 +805,7 @@ class InversionFromTopKLogProbsExperiment(InversionFromLogitsExperiment):
 #                 )
 #             val_datasets_dict = datasets.DatasetDict(new_tokenized_datasets)
 #         return val_datasets_dict
-# 
+#
 #     def _load_train_dataset_uncached(
 #         self,
 #         model: transformers.PreTrainedModel,
@@ -806,13 +817,13 @@ class InversionFromTopKLogProbsExperiment(InversionFromLogitsExperiment):
 #         # Load datasets
 #         logger.info("Loading dataset '%s'...", self.data_args.dataset_name)
 #         raw_datasets = dataset_from_args(self.data_args)
-# 
+#
 #         # Remove extra features except for 'frozen_embeddings' which could be embeddings
 #         # saved to disk.
 #         column_names = list(raw_datasets["train"].features)
 #         ALLOWED_COLUMN_NAMES = {"frozen_embeddings"}
 #         column_names = [c for c in column_names if c not in ALLOWED_COLUMN_NAMES]
-# 
+#
 #         # this argument allows us to *train* on less data (for example 1% of our training set).
 #         if data_args.use_less_data and (data_args.use_less_data > 0):
 #             for key in raw_datasets:
@@ -821,7 +832,7 @@ class InversionFromTopKLogProbsExperiment(InversionFromLogitsExperiment):
 #         print(
 #             ">> using fast tokenizers:", tokenizer.is_fast, embedder_tokenizer.is_fast
 #         )
-# 
+#
 #         tokenize_fn = (
 #             tokenize_function_llama_chat if self.is_llama_chat else tokenize_function
 #         )
@@ -860,7 +871,7 @@ class InversionFromTopKLogProbsExperiment(InversionFromLogitsExperiment):
 #             )
 #             assert torch.cuda.is_available()
 #             model = model.to(device)
-# 
+#
 #             new_tokenized_datasets = {}
 #             for key, d in tokenized_datasets.items():
 #                 new_fingerprint = (

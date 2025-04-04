@@ -133,12 +133,15 @@ def load_embedder_and_tokenizer(
             model = AutoModelForCausalLM.from_pretrained("gpt2")
             tokenizer = AutoTokenizer.from_pretrained("gpt2")
             tokenizer.pad_token = tokenizer.eos_token
+            if hidden_size := kwargs["hidden_size"] is None:
+                hidden_size = model.config.n_embd
             model = TopKToksLogprobsEmbedder(
                 max_length=kwargs["max_length"],
                 max_new_tokens=kwargs["max_new_tokens"],
                 model=model,
                 tokenizer=tokenizer,
-                hidden_size=model.config.n_embd,
+                hidden_size=hidden_size,
+                extra_tokens=kwargs["extra_tokens"],
             )
             return model, model.tokenizer
 
