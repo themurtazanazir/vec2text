@@ -45,14 +45,12 @@ class AttentionBlock(nn.Module):
 class TokensLogProbEncoder(nn.Module):
     def __init__(
         self,
-        tokenizer,
         hidden_dim,
         max_bytes,
         num_heads,
         num_layers,
     ):
         super(TokensLogProbEncoder, self).__init__()
-        self.tokenizer = tokenizer
         self.hidden_dim = hidden_dim
         self.max_bytes = max_bytes
         self.byte_embedder = nn.Embedding(256, hidden_dim)
@@ -167,7 +165,6 @@ class InversionFromToksProbs(InversionModel):
         bottleneck_dim = self.bottleneck_dim
 
         self.token_embedder = TokensLogProbEncoder(
-            tokenizer=self.embedder.tokenizer,
             hidden_dim=64,
             max_bytes=20,
             num_heads=4,
