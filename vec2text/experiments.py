@@ -1050,6 +1050,7 @@ EXPERIMENT_CLS_MAP = {
     "inversion_from_logits": InversionFromLogitsExperiment,
     "inversion_from_hidden_states": InversionFromHiddenStatesExperiment,
     "inversion_from_topk_logprobs": InversionFromTopKLogProbsExperiment,
+    "inversion_from_topk_logprobs_chosen": InversionFromTopKLogProbsChosenExperiment,
     "reverse_inversion_from_hidden_states": ReverseInversionFromHiddenStatesExperiment,
     "inversion_from_logits_emb": InversionFromLogitsExperiment,
     "corrector": CorrectorExperiment,
