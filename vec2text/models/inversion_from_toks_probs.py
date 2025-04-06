@@ -42,15 +42,10 @@ class AttentionBlock(nn.Module):
         return x
 
 
-class TokensLogProbEncoder(nn.Module):
-    def __init__(
-        self,
-        hidden_dim,
-        max_bytes,
-        num_heads,
-        num_layers,
-    ):
-        super(TokensLogProbEncoder, self).__init__()
+class TokenEncoder(nn.Module):
+    def __init__(self, hidden_dim, max_bytes, num_heads, num_layers):
+        super().__init__()
+
         self.hidden_dim = hidden_dim
         self.max_bytes = max_bytes
         self.byte_embedder = nn.Embedding(256, hidden_dim)
@@ -75,19 +70,13 @@ class TokensLogProbEncoder(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             # nn.Tanh(),
         )
-        self.combiner = nn.Sequential(
-            nn.Linear(hidden_dim + 1, hidden_dim),  # +1 for the logprob
-            nn.ReLU(),
-            # nn.Dropout(dropout),
-            nn.Linear(hidden_dim, 1),
-        )
 
-        self.output_projection = nn.Linear(1, 1, bias=False)
-
-    def _process_chunk(self, chunk_bytes, chunk_logprobs):
+    def _process_chunk(self, chunk_bytes):
         """Process a chunk of bytes and logprobs to produce scalar scores."""
         # Embed bytes
-        chunk_byte_embeddings = self.byte_embedder(chunk_bytes)
+        chunk_byte_embeddings = self.byte_embedder(
+            chunk_bytes
+        )  # B, max_steps, topk, max_bytes, dim
         chunk_B, chunk_max_steps, chunk_top_k, chunk_max_bytes, _ = (
             chunk_byte_embeddings.shape
         )
@@ -95,10 +84,7 @@ class TokensLogProbEncoder(nn.Module):
         # Reshape for processing
         chunk_byte_data = chunk_byte_embeddings.reshape(
             chunk_B * chunk_max_steps * chunk_top_k, chunk_max_bytes, -1
-        )
-        chunk_logprobs_flat = chunk_logprobs.reshape(
-            chunk_B * chunk_max_steps * chunk_top_k
-        )
+        )  # B', max_bytes, dim
 
         # Add positional embeddings
         pos = (
@@ -115,19 +101,64 @@ class TokensLogProbEncoder(nn.Module):
             chunk_byte_data = layer(chunk_byte_data)
 
         # Final processing
-        chunk_byte_data = self.final_norm(chunk_byte_data)
-        chunk_token_encodings = chunk_byte_data.mean(dim=1)
-        chunk_token_encodings = self.pooling(chunk_token_encodings)
+        chunk_byte_data = self.final_norm(chunk_byte_data)  # B', max_bytes, dim
+        chunk_token_encodings = chunk_byte_data.mean(dim=1)  # B', dim
+        chunk_token_encodings = self.pooling(chunk_token_encodings)  # B', dim
 
-        # Combine with logprobs
-        chunk_logprobs_flat = chunk_logprobs_flat.unsqueeze(-1)
-        chunk_combined = torch.cat([chunk_token_encodings, chunk_logprobs_flat], dim=-1)
-        chunk_scalars_flat = self.combiner(chunk_combined)
-        chunk_scalars_flat = self.output_projection(chunk_scalars_flat)
+        return chunk_token_encodings.reshape(
+            chunk_B,
+            chunk_max_steps,
+            chunk_top_k,
+            self.hidden_dim,
+        )
 
-        # Reshape back
-        chunk_scalars = chunk_scalars_flat.view(chunk_B, chunk_max_steps, chunk_top_k)
-        return chunk_scalars
+    def forward(
+        self,
+        bytes_batch,  # B, T, Topk, max_bytes
+    ):
+
+        B, max_steps, top_k = bytes_batch.shape[:3]
+
+        all_encodings = torch.zeros(
+            (B, max_steps, top_k, self.hidden_dim),
+            device=next(self.parameters()).device,
+        )
+
+        chunk_size = 868  # Adjust based on GPU memory
+        for chunk_start in range(0, top_k, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, top_k)
+
+            # Process this chunk and store results
+            chunk_encodings = self._process_chunk(
+                bytes_batch[:, :, chunk_start:chunk_end, :],
+            )
+
+            all_encodings[:, :, chunk_start:chunk_end, :] = chunk_encodings
+
+        return all_encodings  # B, max_steps, topk, dim
+
+
+class TokensLogProbEncoder(nn.Module):
+    def __init__(
+        self,
+        hidden_dim,
+        max_bytes,
+        num_heads,
+        num_layers,
+    ):
+        super(TokensLogProbEncoder, self).__init__()
+        self.token_encoder = TokenEncoder(
+            hidden_dim=hidden_dim,
+            max_bytes=max_bytes,
+            num_heads=num_heads,
+            num_layers=num_layers,
+        )
+        self.combiner = nn.Sequential(
+            nn.Linear(hidden_dim + 1, hidden_dim),  # +1 for the logprob
+            nn.ReLU(),
+            # nn.Dropout(dropout),
+            nn.Linear(hidden_dim, 1),
+        )
 
     def forward(
         self,
@@ -136,23 +167,64 @@ class TokensLogProbEncoder(nn.Module):
     ):
 
         B, max_steps, top_k = bytes_batch.shape[:3]
-        all_scalars = torch.zeros(
-            (B, max_steps, top_k), device=next(self.parameters()).device
+        token_encodings = self.token_encoder(bytes_batch)  # B, T, Topk, self.hidden_dim
+        # B, T, Topk, self.hidden_dim + 1
+        chunk_combined = torch.cat(
+            [token_encodings, topk_logprobs.unsqueeze(-1)], dim=-1
         )
+        hidden_states = self.combiner(chunk_combined)  # B, T, Topk, 1
 
-        chunk_size = 868  # Adjust based on GPU memory
-        for chunk_start in range(0, top_k, chunk_size):
-            chunk_end = min(chunk_start + chunk_size, top_k)
+        return hidden_states.view(B, max_steps, top_k)  # remove last dim
 
-            # Process this chunk and store results
-            chunk_scalars = self._process_chunk(
-                bytes_batch[:, :, chunk_start:chunk_end, :],
-                topk_logprobs[:, :, chunk_start:chunk_end],
-            )
 
-            all_scalars[:, :, chunk_start:chunk_end] = chunk_scalars
+class TokensLogProbChosenEncoder(nn.Module):
+    def __init__(
+        self,
+        hidden_dim,
+        max_bytes,
+        num_heads,
+        num_layers,
+        n_chosen,
+    ):
+        super(TokensLogProbChosenEncoder, self).__init__()
+        self.token_encoder = TokenEncoder(
+            hidden_dim=hidden_dim,
+            max_bytes=max_bytes,
+            num_heads=num_heads,
+            num_layers=num_layers,
+        )
+        self.combiner = nn.Sequential(
+            nn.Linear(hidden_dim + 1, hidden_dim),  # +1 for the logprob
+            nn.ReLU(),
+            # nn.Dropout(dropout),
+            nn.Linear(hidden_dim, 1),
+        )
+        self.chosen_transform(hidden_dim, n_chosen)
 
-        return all_scalars
+    def forward(
+        self,
+        bytes_batch,  # B, T, Topk+1, max_bytes
+        topk_logprobs,  # B, T, Topk
+    ):
+        # this bytes batch is different, the first element in dim=2 (0 indexed) is chosen token
+
+        B, max_steps, top_k = bytes_batch.shape[:3]
+        top_k = top_k - 1  # remove the first k as that is the chosen one
+        token_encodings = self.token_encoder(
+            bytes_batch
+        )  # B, T, Topk+1, self.hidden_dim
+        chosen_encodings = token_encodings[:, :, 0, :]  # B, T, self.hidden_dim
+        # B, T, Topk, self.hidden_dim
+        token_encodings = token_encodings[:, :, 1:, :]
+        # B, T, Topk, self.hidden_dim + 1
+        chunk_combined = torch.cat(
+            [token_encodings, topk_logprobs.unsqueeze(-1)], dim=-1
+        )
+        hidden_states = self.combiner(chunk_combined)  # B, T, Topk, 1
+        hidden_states = hidden_states.view(B, max_steps, top_k)  # B, T, Topk
+        chosen_transformed = self.chosen_transform(chosen_encodings)  # B, T, Topk
+
+        return hidden_states + chosen_transformed
 
 
 class InversionFromToksProbs(InversionModel):
@@ -190,12 +262,13 @@ class InversionFromToksProbs(InversionModel):
         for token_id in range(vocab_size):
             try:
                 token_str = tokenizer.decode([token_id])
-                token_bytes = token_str.encode('utf-8')
+                token_bytes = token_str.encode("utf-8")
 
                 # Convert bytes to tensor and store in embedding
                 byte_len = min(len(token_bytes), max_bytes)
-                byte_values = torch.tensor([int(b) for b in token_bytes[:byte_len]],
-                                           dtype=torch.int32)
+                byte_values = torch.tensor(
+                    [int(b) for b in token_bytes[:byte_len]], dtype=torch.int32
+                )
 
                 byte_embedding[token_id, :byte_len] = byte_values
             except Exception as e:
@@ -252,8 +325,8 @@ class InversionFromToksProbs(InversionModel):
                 embedder_attention_mask=embedder_attention_mask,
             )
 
-        topk_ids = embedder_output["topk_ids"] # B, T, topk
-        B, T, topk = topk_ids.shape 
+        topk_ids = embedder_output["topk_ids"]  # B, T, topk
+        B, T, topk = topk_ids.shape
         flattened_ids = topk_ids.view(-1)
         byte_ids = self.token2bytes[flattened_ids]
         byte_ids = byte_ids.view(B, T, topk, -1)
@@ -293,7 +366,6 @@ class InversionFromToksProbs(InversionModel):
             embedder_attention_mask=inputs.get("embedder_attention_mask"),
             frozen_topk_ids=inputs.get("frozen_topk_ids"),
             frozen_topk_logprobs=inputs.get("frozen_topk_logprobs"),
-
         )
 
         if "decoder_input_ids" in inputs:
@@ -344,4 +416,42 @@ class InversionFromToksProbs(InversionModel):
             labels=labels,
             decoder_input_ids=decoder_input_ids,
             past_key_values=past_key_values,
+        )
+
+
+class InversionFromToksProbsChosen(InversionFromToksProbs):
+    def __init__(self, config: InversionConfig):
+        super().__init__(config=config)
+
+        encoder_hidden_dim = self.encoder_decoder.config.hidden_size
+        self.encoder_hidden_dim = encoder_hidden_dim
+        self.embedder_is_decoder = True
+        bottleneck_dim = self.bottleneck_dim
+
+        self.token_embedder = TokensLogProbChosenEncoder(
+            hidden_dim=64,
+            max_bytes=20,
+            num_heads=4,
+            num_layers=2,
+            n_chosen=self.embedder_dim,
+        )
+
+        self.embedding_transform = nn.Sequential(
+            nn.Linear(self.embedder_dim, bottleneck_dim),
+            nn.Dropout(self.encoder_decoder.config.dropout_rate),
+            nn.GELU(),
+            nn.Linear(bottleneck_dim, encoder_hidden_dim),
+        )
+        self.register_buffer("token2bytes", self.create_byte_embedding())
+
+    def load_embedder_and_tokenizer(self, config):
+        return load_embedder_and_tokenizer(
+            name=config.embedder_model_name,
+            torch_dtype=config.embedder_torch_dtype,
+            use_toks_probs=True,
+            add_chosen_ids=True,
+            max_length=config.max_seq_length,
+            max_new_tokens=config.max_new_tokens,
+            extra_tokens=config.extra_tokens,
+            hidden_size=config.hidden_size,
         )

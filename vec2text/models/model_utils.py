@@ -70,7 +70,8 @@ def disable_dropout(model: nn.Module):
     for m in dropout_modules:
         m.p = 0.0
     print(
-        f"Disabled {len(dropout_modules)} dropout modules from model type {type(model)}"
+        f"Disabled {len(dropout_modules)} dropout modules from model type {
+            type(model)}"
     )
 
 
@@ -115,6 +116,7 @@ def load_embedder_and_tokenizer(
     torch_dtype: str,
     use_hidden_states: bool = False,
     use_toks_probs: bool = False,
+    add_chosen_ids: bool = False,
     **kwargs,
 ):
     # TODO make abstract/argparse for it etc.
@@ -126,25 +128,45 @@ def load_embedder_and_tokenizer(
     }
     print(f"{use_hidden_states=}")
     if use_toks_probs:
-        if name == "gpt2":
-            from vec2text.embedders.embeddings import TopKToksLogprobsEmbedder
-            from transformers import AutoModelForCausalLM, AutoTokenizer
+        if add_chosen_ids:
+            if name == "gpt2":
+                from vec2text.embedders.embeddings import TopKToksLogprobsChosenEmbedder
+                from transformers import AutoModelForCausalLM, AutoTokenizer
 
-            model = AutoModelForCausalLM.from_pretrained("gpt2")
-            tokenizer = AutoTokenizer.from_pretrained("gpt2")
-            tokenizer.pad_token = tokenizer.eos_token
-            if hidden_size := kwargs["hidden_size"] is None:
-                hidden_size = model.config.n_embd
-            model = TopKToksLogprobsEmbedder(
-                max_length=kwargs["max_length"],
-                max_new_tokens=kwargs["max_new_tokens"],
-                model=model,
-                tokenizer=tokenizer,
-                hidden_size=hidden_size,
-                extra_tokens=kwargs["extra_tokens"],
-            )
-            return model, model.tokenizer
+                model = AutoModelForCausalLM.from_pretrained("gpt2")
+                tokenizer = AutoTokenizer.from_pretrained("gpt2")
+                tokenizer.pad_token = tokenizer.eos_token
+                if hidden_size := kwargs["hidden_size"] is None:
+                    hidden_size = model.config.n_embd
+                model = TopKToksLogprobsChosenEmbedder(
+                    max_length=kwargs["max_length"],
+                    max_new_tokens=kwargs["max_new_tokens"],
+                    model=model,
+                    tokenizer=tokenizer,
+                    hidden_size=hidden_size,
+                    extra_tokens=kwargs["extra_tokens"],
+                )
+                return model, model.tokenizer
 
+        else:
+            if name == "gpt2":
+                from vec2text.embedders.embeddings import TopKToksLogprobsEmbedder
+                from transformers import AutoModelForCausalLM, AutoTokenizer
+
+                model = AutoModelForCausalLM.from_pretrained("gpt2")
+                tokenizer = AutoTokenizer.from_pretrained("gpt2")
+                tokenizer.pad_token = tokenizer.eos_token
+                if hidden_size := kwargs["hidden_size"] is None:
+                    hidden_size = model.config.n_embd
+                model = TopKToksLogprobsEmbedder(
+                    max_length=kwargs["max_length"],
+                    max_new_tokens=kwargs["max_new_tokens"],
+                    model=model,
+                    tokenizer=tokenizer,
+                    hidden_size=hidden_size,
+                    extra_tokens=kwargs["extra_tokens"],
+                )
+                return model, model.tokenizer
     elif use_hidden_states:
         if name == "gpt2":
             from vec2text.embedders.embeddings import GPT2Embedder

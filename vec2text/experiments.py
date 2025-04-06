@@ -27,6 +27,7 @@ from vec2text.models import (
     InversionModelDecoderOnly,
     InversionModelNonAutoregressive,
     InversionFromToksProbs,
+    InversionFromToksProbsChosen,
 )
 from vec2text.models.config import InversionConfig
 from vec2text.run_args import DataArguments, ModelArguments, TrainingArguments
@@ -438,7 +439,8 @@ class Experiment(abc.ABC):
         ###########################################################################
         if self.model_args.use_frozen_embeddings_as_input:
             print(
-                f"[Precomputing embeddings with batch size: {self.training_args.per_device_train_batch_size}]"
+                "[Precomputing embeddings with batch size: "
+                f"{self.training_args.per_device_train_batch_size}]"
             )
             assert torch.cuda.is_available()
             model = model.to(device)
@@ -580,7 +582,10 @@ class Experiment(abc.ABC):
             dataset_kwargs["extra_tokens"] = self.model_args.extra_tokens
         if self.model_args.hidden_size:
             dataset_kwargs["extra_tokens"] = self.model_args.hidden_size
-        if self.training_args.experiment in ["inversion_from_topk_logprobs"]:
+        if self.training_args.experiment in [
+            "inversion_from_topk_logprobs",
+            "inversion_from_topk_logprobs_chosen",
+        ]:
             dataset_kwargs["experiment"] = self.training_args.experiment
 
         # os.environ["TOKENIZERS_PARALLELISM"] = "True"
@@ -729,6 +734,12 @@ class InversionFromTopKLogProbsExperiment(InversionFromLogitsExperiment):
 
     def load_model(self) -> transformers.PreTrainedModel:
         return InversionFromToksProbs(config=self.config)
+
+
+class InversionFromTopKLogProbsChosenExperiment(InversionFromLogitsExperiment):
+
+    def load_model(self) -> transformers.PreTrainedModel:
+        return InversionFromToksProbsChosen(config=self.config)
 
 
 #     def _prepare_val_datasets_dict(
@@ -942,7 +953,9 @@ class InversionExperimentNonAutoregressive(Experiment):
         )
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(
-            f"Training model with name `{self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
+            "Training model with name "
+            f"`{self.model_args.model_name_or_path}` - "
+            f"Total size={n_params/2**20:.2f}M params"
         )
         return vec2text.trainers.InversionTrainerNonAutoregressive(
             model=model,

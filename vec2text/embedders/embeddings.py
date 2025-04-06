@@ -164,6 +164,70 @@ class TopKToksLogprobsEmbedder(nn.Module):
         return {"topk_logprobs": topk_logprob, "topk_ids": topk_ids}
 
 
+class TopKToksLogprobsChosenEmbedder(nn.Module):
+
+    def __init__(
+        self,
+        max_length: int,
+        max_new_tokens: int,
+        model,
+        tokenizer,
+        extra_tokens,
+        hidden_size,
+    ):
+        super().__init__()
+
+        self.config = SimpleNamespace(hidden_size=hidden_size + extra_tokens)
+        self.max_length = max_length
+        self.max_new_tokens = max_new_tokens
+        self.model = model
+        self.tokenizer = tokenizer
+        self.tokenizer.padding_side = "left"
+
+    def train(self, mode):
+        warnings.warn("Tried to set a mode. This model is permanently set in eval mode")
+        return super().train(mode=False)
+
+    def load_model_and_tokenizer(self):
+        return self.model, self.tokenizer
+
+    def get_toks_logprobs(
+        self,
+        embedder_input_ids,
+        embedder_attention_mask,
+        top_k=None,
+    ):
+        device = next(self.model.parameters()).device
+        embedder_input_ids = embedder_input_ids.to(device)
+        embedder_attention_mask = embedder_attention_mask.to(device)
+        if top_k is None:
+            top_k = self.config.hidden_size
+        output = self.model.generate(
+            input_ids=embedder_input_ids,
+            attention_mask=embedder_attention_mask,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=True,
+            temperature=0.7,
+            pad_token_id=self.tokenizer.pad_token_id,
+            output_scores=True,
+            return_dict_in_generate=True,
+            use_cache=True,
+            top_k=top_k,
+        )
+
+        logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
+        logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
+        topk_logprobs, topk_ids = torch.topk(logprobs, k=top_k, dim=-1)
+        chosen_tokens = output.sequences[:, -self.max_new_tokens :].unsqueeze(-1)
+        topk_ids = torch.cat([chosen_tokens, topk_ids], dim=-1)
+        # topk_logprobs = topk_logprobs - topk_logprobs.mean(-1, keepdims=True)
+        return topk_logprobs, topk_ids
+
+    def __call__(self, *args, **kwargs):
+        topk_logprob, topk_ids = self.get_toks_logprobs(*args, **kwargs)
+        return {"topk_logprobs": topk_logprob, "topk_ids": topk_ids}
+
+
 class TransformedHiddenStateEmbedder(Embedder, ABC):
 
     def extract_hidden_state_from_logprobs(self, logprobs):
