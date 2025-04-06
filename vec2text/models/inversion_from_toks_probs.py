@@ -199,7 +199,7 @@ class TokensLogProbChosenEncoder(nn.Module):
             # nn.Dropout(dropout),
             nn.Linear(hidden_dim, 1),
         )
-        self.chosen_transform(hidden_dim, n_chosen)
+        self.chosen_transform = nn.Linear(hidden_dim, n_chosen)
 
     def forward(
         self,
