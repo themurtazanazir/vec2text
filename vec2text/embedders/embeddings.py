@@ -112,6 +112,7 @@ class TopKToksLogprobsEmbedder(nn.Module):
         tokenizer,
         extra_tokens,
         hidden_size,
+        topk,
     ):
         super(TopKToksLogprobsEmbedder, self).__init__()
 
@@ -226,6 +227,9 @@ class TopKToksLogprobsChosenEmbedder(nn.Module):
         return topk_logprobs, topk_ids
 
     def __call__(self, embedder_input_ids, embedder_attention_mask, top_k=None):
+
+        if top_k is None:
+            top_k = self.config.hidden_size
         logprobs = torch.zeros(
             (
                 embedder_input_ids.shape[0],
