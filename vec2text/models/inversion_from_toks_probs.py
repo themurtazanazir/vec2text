@@ -327,10 +327,10 @@ class InversionFromToksProbs(InversionModel):
             )
 
         topk_ids = embedder_output["topk_ids"]  # B, T, topk
-        B, T, topk = topk_ids.shape
+        shape = topk_ids.shape
         flattened_ids = topk_ids.view(-1)
         byte_ids = self.token2bytes[flattened_ids]
-        byte_ids = byte_ids.view(B, T, topk, -1)
+        byte_ids = byte_ids.view(*shape, -1)
 
         embeddings = self.token_embedder(
             bytes_batch=byte_ids,
