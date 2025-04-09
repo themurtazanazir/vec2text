@@ -174,6 +174,7 @@ class TopKToksLogprobsChosenEmbedder(nn.Module):
         tokenizer,
         extra_tokens,
         hidden_size,
+        num_gens,
     ):
         super().__init__()
 
@@ -183,6 +184,7 @@ class TopKToksLogprobsChosenEmbedder(nn.Module):
         self.model = model
         self.tokenizer = tokenizer
         self.tokenizer.padding_side = "left"
+        self.num_gens = num_gens
 
     def train(self, mode):
         warnings.warn("Tried to set a mode. This model is permanently set in eval mode")
@@ -223,8 +225,32 @@ class TopKToksLogprobsChosenEmbedder(nn.Module):
         # topk_logprobs = topk_logprobs - topk_logprobs.mean(-1, keepdims=True)
         return topk_logprobs, topk_ids
 
-    def __call__(self, *args, **kwargs):
-        topk_logprob, topk_ids = self.get_toks_logprobs(*args, **kwargs)
+    def __call__(self, embedder_input_ids, embedder_attention_mask, top_k=None):
+        logprobs = torch.zeros(
+            (
+                embedder_input_ids.shape[0],
+                self.num_gens,
+                self.max_new_tokens,
+                top_k,
+            )
+        )
+        ids = torch.zeros(
+            (
+                embedder_input_ids.shape[0],
+                self.num_gens,
+                self.max_new_tokens,
+                top_k + 1,  # chosen + topk
+            )
+        )
+
+        for gen_num in range(self.num_gens):
+            topk_logprob, topk_ids = self.get_toks_logprobs(
+                embedder_input_ids=embedder_input_ids,
+                embedder_attention_mask=embedder_attention_mask,
+                top_k=top_k,
+            )
+            logprobs[:, gen_num, ...] = topk_logprob
+            ids[:, gen_num, ...] = ids
         return {"topk_logprobs": topk_logprob, "topk_ids": topk_ids}
 
 

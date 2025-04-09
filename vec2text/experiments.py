@@ -587,6 +587,8 @@ class Experiment(abc.ABC):
             "inversion_from_topk_logprobs_chosen",
         ]:
             dataset_kwargs["experiment"] = self.training_args.experiment
+        if self.model_args.num_gens:
+            dataset_kwargs["num_gens"] = self.model_args.num_gens
 
         # os.environ["TOKENIZERS_PARALLELISM"] = "True"
         print(

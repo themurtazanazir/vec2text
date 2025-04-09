@@ -76,14 +76,12 @@ class TokenEncoder(nn.Module):
         # Embed bytes
         chunk_byte_embeddings = self.byte_embedder(
             chunk_bytes
-        )  # B, max_steps, topk, max_bytes, dim
-        chunk_B, chunk_max_steps, chunk_top_k, chunk_max_bytes, _ = (
-            chunk_byte_embeddings.shape
-        )
+        )  # B, gens, max_steps, topk, max_bytes, dim
+        *shapes, chunk_max_bytes, dim = chunk_byte_embeddings.shape
 
         # Reshape for processing
         chunk_byte_data = chunk_byte_embeddings.reshape(
-            chunk_B * chunk_max_steps * chunk_top_k, chunk_max_bytes, -1
+            -1, chunk_max_bytes, dim
         )  # B', max_bytes, dim
 
         # Add positional embeddings
@@ -106,21 +104,19 @@ class TokenEncoder(nn.Module):
         chunk_token_encodings = self.pooling(chunk_token_encodings)  # B', dim
 
         return chunk_token_encodings.reshape(
-            chunk_B,
-            chunk_max_steps,
-            chunk_top_k,
+            *shapes,
             self.hidden_dim,
         )
 
     def forward(
         self,
-        bytes_batch,  # B, T, Topk, max_bytes
+        bytes_batch,  # B, gens, T, Topk, max_bytes
     ):
 
-        B, max_steps, top_k = bytes_batch.shape[:3]
+        *shapes, top_k = bytes_batch.shape[:3]
 
         all_encodings = torch.zeros(
-            (B, max_steps, top_k, self.hidden_dim),
+            (*shapes, top_k, self.hidden_dim),
             device=next(self.parameters()).device,
         )
 
@@ -135,7 +131,7 @@ class TokenEncoder(nn.Module):
 
             all_encodings[:, :, chunk_start:chunk_end, :] = chunk_encodings
 
-        return all_encodings  # B, max_steps, topk, dim
+        return all_encodings  # B, gens, max_steps, topk, dim
 
 
 class TokensLogProbEncoder(nn.Module):
@@ -454,4 +450,5 @@ class InversionFromToksProbsChosen(InversionFromToksProbs):
             max_new_tokens=config.max_new_tokens,
             extra_tokens=config.extra_tokens,
             hidden_size=config.hidden_size,
+            num_gens=config.num_gens,
         )

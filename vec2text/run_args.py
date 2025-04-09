@@ -134,6 +134,9 @@ class ModelArguments:
             "help": "The number of tokens to use for logprobs. Defaults to embedder's hidden size"
         },
     )
+    num_gens: Optional[int] = field(
+        default=None, metadata={"help": "number of times to generate the output for embeddings"}
+    )
     torch_dtype: Optional[str] = field(
         default=None,
         metadata={

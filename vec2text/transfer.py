@@ -105,31 +105,35 @@ def get_logprobs(model, tokenizer, embedder_input_ids, embedder_attention_mask):
 
 def generate(embedder_input_ids, embedder_attention_mask, optimize_fn, debug=False):
 
-    llama_overlap_toks, other_overlap_toks = get_overlap_toks(
-        trainer.embedder_tokenizer, other_tokenizer, model.embedder.chosen_tokens
-    )
-    # messages = [{"role":"system", "content":sys},{"role":"user", "content":prompt}]
-    # text = other_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     other_logprobs = get_logprobs(
         other_llm, other_tokenizer, embedder_input_ids, embedder_attention_mask
     )
-    if debug:
-        _, decoded = torch.max(other_logprobs, dim=-1)
-        decoded_string = other_tokenizer.decode(decoded)
-        print(f"{decoded_string=}")
-    import numpy as np
-
-    llama_unembed = model.embedder.model.lm_head.weight.data.float()
-    batch_hidden_states = []
-    for lps in other_logprobs:
-        llama2_hidden_state = optimize_fn(
-            llama_unembed, lps, llama_overlap_toks, other_overlap_toks
+    if optimize_fn is not None:
+        llama_overlap_toks, other_overlap_toks = get_overlap_toks(
+            trainer.embedder_tokenizer, other_tokenizer, model.embedder.chosen_tokens
         )
-        batch_hidden_states.append(llama2_hidden_state)
-    batch_hidden_states = torch.stack(batch_hidden_states)  # b x max_toks x dims
-    # b x max_toks x vocab
-    llama2_logits = batch_hidden_states @ llama_unembed.T
-    llama2_logprobs = torch.nn.functional.log_softmax(llama2_logits, dim=-1)
+        # messages = [{"role":"system", "content":sys},{"role":"user", "content":prompt}]
+        # text = other_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        if debug:
+            _, decoded = torch.max(other_logprobs, dim=-1)
+            decoded_string = other_tokenizer.decode(decoded)
+            print(f"{decoded_string=}")
+        import numpy as np
+
+        llama_unembed = model.embedder.model.lm_head.weight.data.float()
+        batch_hidden_states = []
+        for lps in other_logprobs:
+            llama2_hidden_state = optimize_fn(
+                llama_unembed, lps, llama_overlap_toks, other_overlap_toks
+            )
+            batch_hidden_states.append(llama2_hidden_state)
+        batch_hidden_states = torch.stack(batch_hidden_states)  # b x max_toks x dims
+        # b x max_toks x vocab
+        llama2_logits = batch_hidden_states @ llama_unembed.T
+        llama2_logprobs = torch.nn.functional.log_softmax(llama2_logits, dim=-1)
+    else:
+        # assuming TOKENIZER IS EXACTLY same
+        llama2_logprobs = other_logprobs
     llama2_logprobs = llama2_logprobs[:, :, model.embedder.chosen_tokens]
     alr = llama2_logprobs[:, :, 1:] - llama2_logprobs[:, :, 0:1]
     embeddings = model.embedding_transform(alr)
