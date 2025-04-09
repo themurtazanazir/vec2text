@@ -255,7 +255,7 @@ class TopKToksLogprobsChosenEmbedder(nn.Module):
             )
             logprobs[:, gen_num, ...] = topk_logprob
             ids[:, gen_num, ...] = topk_ids
-        return {"topk_logprobs": topk_logprob, "topk_ids": topk_ids}
+        return {"topk_logprobs": logprobs, "topk_ids": ids}
 
 
 class TransformedHiddenStateEmbedder(Embedder, ABC):
