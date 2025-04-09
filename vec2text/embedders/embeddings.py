@@ -254,7 +254,7 @@ class TopKToksLogprobsChosenEmbedder(nn.Module):
                 top_k=top_k,
             )
             logprobs[:, gen_num, ...] = topk_logprob
-            ids[:, gen_num, ...] = ids
+            ids[:, gen_num, ...] = topk_ids
         return {"topk_logprobs": topk_logprob, "topk_ids": topk_ids}
 
 
