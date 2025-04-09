@@ -10,6 +10,7 @@ from vec2text.models.config import InversionConfig
 from vec2text.models.inversion import InversionModel
 
 from vec2text.models.model_utils import load_embedder_and_tokenizer
+from transformers.modeling_outputs import BaseModelOutput
 
 
 class AttentionBlock(nn.Module):
@@ -99,7 +100,8 @@ class TokenEncoder(nn.Module):
             chunk_byte_data = layer(chunk_byte_data)
 
         # Final processing
-        chunk_byte_data = self.final_norm(chunk_byte_data)  # B', max_bytes, dim
+        chunk_byte_data = self.final_norm(
+            chunk_byte_data)  # B', max_bytes, dim
         chunk_token_encodings = chunk_byte_data.mean(dim=1)  # B', dim
         chunk_token_encodings = self.pooling(chunk_token_encodings)  # B', dim
 
@@ -163,7 +165,8 @@ class TokensLogProbEncoder(nn.Module):
     ):
 
         B, max_steps, top_k = bytes_batch.shape[:3]
-        token_encodings = self.token_encoder(bytes_batch)  # B, T, Topk, self.hidden_dim
+        token_encodings = self.token_encoder(
+            bytes_batch)  # B, T, Topk, self.hidden_dim
         # B, T, Topk, self.hidden_dim + 1
         chunk_combined = torch.cat(
             [token_encodings, topk_logprobs.unsqueeze(-1)], dim=-1
@@ -218,7 +221,8 @@ class TokensLogProbChosenEncoder(nn.Module):
         )
         hidden_states = self.combiner(chunk_combined)  # B, T, Topk, 1
         hidden_states = hidden_states.view(B, max_steps, top_k)  # B, T, Topk
-        chosen_transformed = self.chosen_transform(chosen_encodings)  # B, T, Topk
+        chosen_transformed = self.chosen_transform(
+            chosen_encodings)  # B, T, Topk
 
         return hidden_states + chosen_transformed
 
@@ -252,7 +256,8 @@ class InversionFromToksProbs(InversionModel):
         vocab_size = tokenizer.vocab_size
 
         # Initialize embedding tensor
-        byte_embedding = torch.zeros((vocab_size, max_bytes), dtype=torch.int32)
+        byte_embedding = torch.zeros(
+            (vocab_size, max_bytes), dtype=torch.int32)
 
         # Fill embedding with byte values for each token
         for token_id in range(vocab_size):
@@ -333,7 +338,8 @@ class InversionFromToksProbs(InversionModel):
         )
         embeddings = self.embedding_transform(embeddings)
         attention_mask = torch.ones(
-            (embeddings.shape[0], embeddings.shape[1]), device=embeddings.device
+            (embeddings.shape[0], embeddings.shape[1]
+             ), device=embeddings.device
         )
 
         assert embeddings.shape == (
@@ -451,4 +457,52 @@ class InversionFromToksProbsChosen(InversionFromToksProbs):
             extra_tokens=config.extra_tokens,
             hidden_size=config.hidden_size,
             num_gens=config.num_gens,
+        )
+
+    def forward(
+        self,
+        embedder_input_ids: torch.Tensor,
+        embedder_attention_mask: torch.Tensor,
+        labels: Optional[torch.Tensor] = None,
+        frozen_topk_ids: Optional[torch.Tensor] = None,
+        frozen_topk_logprobs: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.Tensor] = None,
+        past_key_values: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> Dict[str, torch.Tensor]:
+        # Unused: input_ids, attention_mask
+
+        inputs_embeds, attention_mask = self.embed_and_project(
+            embedder_input_ids=embedder_input_ids,
+            embedder_attention_mask=embedder_attention_mask,
+            frozen_topk_ids=frozen_topk_ids,
+            frozen_topk_logprobs=frozen_topk_logprobs,
+        )
+
+        B, num_gens, max_new_tokens, dim = inputs_embeds.shape
+        # send each generations separately to encoder
+        inputs_embeds = inputs_embeds.view(B*num_gens, max_new_tokens, dim)
+
+        encoder_outputs = self.encoder_decoder.encoder(
+            input_ids=None,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            head_mask=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
+        )
+        # B, num_gens, max_new_tokens, dim
+        last_hidden_states = encoder_outputs[0]
+        last_hidden_states = last_hidden_states.reshape(
+            B, num_gens, max_new_tokens, -1).view(B, num_gens*max_new_tokens, -1)
+        encoder_outputs = BaseModelOutput(
+            last_hidden_state=last_hidden_states, hidden_states=None, attentions=None,)
+
+        return self.encoder_decoder(
+            encoder_outputs=encoder_outputs,
+            attention_mask=attention_mask,
+            labels=labels,
+            decoder_input_ids=decoder_input_ids,
+            past_key_values=past_key_values,
         )
