@@ -236,7 +236,7 @@ class TopKToksLogprobsChosenEmbedder(nn.Module):
                 self.num_gens,
                 self.max_new_tokens,
                 top_k,
-            )
+            ),
         )
         ids = torch.zeros(
             (
@@ -244,7 +244,8 @@ class TopKToksLogprobsChosenEmbedder(nn.Module):
                 self.num_gens,
                 self.max_new_tokens,
                 top_k + 1,  # chosen + topk
-            )
+            ),
+            dtype=torch.long,
         )
 
         for gen_num in range(self.num_gens):
