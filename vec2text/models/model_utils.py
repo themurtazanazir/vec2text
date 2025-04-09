@@ -145,6 +145,7 @@ def load_embedder_and_tokenizer(
                     tokenizer=tokenizer,
                     hidden_size=hidden_size,
                     extra_tokens=kwargs["extra_tokens"],
+                    num_gens=kwargs["num_gens"],
                 )
                 return model, model.tokenizer
 
