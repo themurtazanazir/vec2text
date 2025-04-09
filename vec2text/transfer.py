@@ -13,13 +13,11 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import transformers
 import os
 
-os.environ["TMPDIR"] = "/workspace/mnazir/vec2text/temp/"
-os.environ["HF_HUB_CACHE"] = "/workspace/mnazir/vec2text/huggingface/hub/"
-os.environ["HF_HOME"] = "/workspace/mnazir/vec2text/huggingface/"
-os.environ["VEC2TEXT_CACHE"] = "/workspace/mnazir/vec2text/vec2text/"
-os.environ["WANDB_DIR"] = "/workspace/mnazir/vec2text/"
-# os.environ["CUDA_VISIBLE_DEVICES"]="-1"
-
+os.environ["TMPDIR"] = "/home/mnazir/vec2text/data/test/temp/"
+os.environ["HF_HOME"]="/home/mnazir/vec2text/data/test/huggingface/"
+os.environ["HF_HUB_CACHE"]="/home/mnazir/vec2text/data/test/huggingface/hub/"
+os.environ["VEC2TEXT_CACHE"]="/home/mnazir/vec2text/data/test/vec2text/"
+os.environ["WANDB_DIR"]="/home/mnazir/vec2text/data/test/"
 
 nltk.download("punkt_tab")
 
@@ -104,7 +102,6 @@ def get_logprobs(model, tokenizer, embedder_input_ids, embedder_attention_mask):
 
 
 def generate(embedder_input_ids, embedder_attention_mask, optimize_fn, debug=False):
-
     other_logprobs = get_logprobs(
         other_llm, other_tokenizer, embedder_input_ids, embedder_attention_mask
     )
@@ -422,7 +419,7 @@ def get_val_datasets():
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-cmd = "--per_device_train_batch_size 250 --per_device_eval_batch_size 250 --max_seq_length 64 --num_train_epochs 100 --max_eval_samples 1000 --eval_steps 25000 --warmup_steps 25000 --learning_rate 0.0002 --dataset_name one_million_instructions --model_name_or_path t5-base --use_wandb=0 --experiment inversion_from_hidden_states --bf16=1 --embedder_torch_dtype bfloat16 --lr_scheduler_type constant_with_warmup --use_frozen_embeddings_as_input 1 --mock_embedder 0 --embedder_model_name llama2_chat-random_k-alr --max_new_tokens 16 --output_dir /workspace/llama2_chat-random_k-alr-16-toks-bugfix-4-nodes/ --exp_group_name llama2-chat --extra_tokens 100"
+cmd = "--per_device_train_batch_size 250 --per_device_eval_batch_size 250 --max_seq_length 64 --num_train_epochs 100 --max_eval_samples 1000 --eval_steps 25000 --warmup_steps 25000 --learning_rate 0.0002 --dataset_name one_million_instructions --model_name_or_path t5-base --use_wandb=0 --experiment inversion_from_hidden_states --bf16=1 --embedder_torch_dtype bfloat16 --lr_scheduler_type constant_with_warmup --use_frozen_embeddings_as_input 1 --mock_embedder 1 --embedder_model_name llama2_chat-random_k-alr --max_new_tokens 16 --output_dir /home/mnazir/vec2text/data/test/experiments/llama2_chat-random_k-alr-16-toks-bugfix-4-nodes/ --exp_group_name llama2-chat --extra_tokens 100"
 
 
 parser = transformers.HfArgumentParser(
@@ -435,6 +432,10 @@ model = experiment.load_model()
 
 
 ckpt = experiment._get_checkpoint()
+model.embedder.cpu()
+from vec2text.utils import MockEmbedder
+# del model.embedder
+# model.embedder = MockEmbedder()
 print("CKPT", ckpt)
 trainer = experiment.trainer_cls(
     model=model,
@@ -443,6 +444,7 @@ trainer = experiment.trainer_cls(
 )
 trainer._load_from_checkpoint(ckpt)
 trainer.model.eval()
+
 
 
 # other_llm_name = "Qwen/Qwen2.5-7B-Instruct"
@@ -468,21 +470,22 @@ val_datasets_dict = get_val_datasets()
 metrics = []
 for key in val_datasets_dict:
     for transform_fn in [
-        optimize_transfer.optimize_transform,
-        optimize_transfer.optimize_transform_matt,
+#         optimize_transfer.optimize_transform,
+#         optimize_transfer.optimize_transform_matt,
+None # No transform
     ]:
         dl = trainer.get_eval_dataloader(val_datasets_dict[key])
         out = eval_generation_metrics(trainer, dl, transform_fn=transform_fn)
         metrics.append(
             {
                 "ds": key,
-                "tranform_fn": transform_fn.__name__,
+                "tranform_fn": transform_fn.__name__ if transform_fn else None,
                 "metrics": out,
                 "embedder": other_llm_name,
             }
         )
 
-with open(f"transform_metrics_{other_llm_name.replace('/', '__')}.json", "w") as f:
+with open(f"transform_metrics_None_{other_llm_name.replace('/', '__')}.json", "w") as f:
     json.dump(metrics, f, indent=4)
 # val_datasets_dict = load_standard_val_datasets()
 # for name, dataset in val_datasets_dict.items():
