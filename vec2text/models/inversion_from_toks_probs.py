@@ -115,7 +115,7 @@ class TokenEncoder(nn.Module):
         bytes_batch,  # B, gens, T, Topk, max_bytes
     ):
 
-        *shapes, top_k = bytes_batch.shape[:3]
+        *shapes, top_k, _ = bytes_batch.shape
 
         all_encodings = torch.zeros(
             (*shapes, top_k, self.hidden_dim),
