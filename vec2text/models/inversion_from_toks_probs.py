@@ -202,19 +202,19 @@ class TokensLogProbChosenEncoder(nn.Module):
 
     def forward(
         self,
-        bytes_batch,  # B, T, Topk+1, max_bytes
-        topk_logprobs,  # B, T, Topk
+        bytes_batch,  # B, num_gens, T, Topk+1, max_bytes
+        topk_logprobs,  # B, num_gens, T, Topk
     ):
         # this bytes batch is different, the first element in dim=2 (0 indexed) is chosen token
 
-        B, max_steps, top_k = bytes_batch.shape[:3]
+        B, num_gens, max_steps, top_k, _ = bytes_batch.shape
         top_k = top_k - 1  # remove the first k as that is the chosen one
         token_encodings = self.token_encoder(
             bytes_batch
-        )  # B, T, Topk+1, self.hidden_dim
-        chosen_encodings = token_encodings[:, :, 0, :]  # B, T, self.hidden_dim
+        )  # B, num_gens, T, Topk+1, self.hidden_dim
+        chosen_encodings = token_encodings[..., 0, :]  # B, T, self.hidden_dim
         # B, T, Topk, self.hidden_dim
-        token_encodings = token_encodings[:, :, 1:, :]
+        token_encodings = token_encodings[..., 1:, :]
         # B, T, Topk, self.hidden_dim + 1
         chunk_combined = torch.cat(
             [token_encodings, topk_logprobs.unsqueeze(-1)], dim=-1
