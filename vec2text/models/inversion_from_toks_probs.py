@@ -128,10 +128,10 @@ class TokenEncoder(nn.Module):
 
             # Process this chunk and store results
             chunk_encodings = self._process_chunk(
-                bytes_batch[:, :, chunk_start:chunk_end, :],
+                bytes_batch[..., chunk_start:chunk_end, :],
             )
 
-            all_encodings[:, :, chunk_start:chunk_end, :] = chunk_encodings
+            all_encodings[..., chunk_start:chunk_end, :] = chunk_encodings
 
         return all_encodings  # B, gens, max_steps, topk, dim
 
