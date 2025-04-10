@@ -212,7 +212,8 @@ class TokensLogProbChosenEncoder(nn.Module):
         token_encodings = self.token_encoder(
             bytes_batch
         )  # B, num_gens, T, Topk+1, self.hidden_dim
-        chosen_encodings = token_encodings[..., 0, :]  # B, num_gens, T, self.hidden_dim
+        # B, num_gens, T, self.hidden_dim
+        chosen_encodings = token_encodings[..., 0, :]
         # B, num_gens, T, Topk, self.hidden_dim
         token_encodings = token_encodings[..., 1:, :]
 
@@ -220,8 +221,10 @@ class TokensLogProbChosenEncoder(nn.Module):
         chunk_combined = torch.cat(
             [token_encodings, topk_logprobs.unsqueeze(-1)], dim=-1
         )
-        hidden_states = self.combiner(chunk_combined)  # B, num_gens, T, Topk, 1
-        hidden_states = hidden_states.view(B, num_gens, max_steps, top_k)  # B, num_gens, T, Topk
+        hidden_states = self.combiner(
+            chunk_combined)  # B, num_gens, T, Topk, 1
+        hidden_states = hidden_states.view(
+            B, num_gens, max_steps, top_k)  # B, num_gens, T, Topk
         chosen_transformed = self.chosen_transform(
             chosen_encodings)  # B, num_gens, T, Topk
 
@@ -460,6 +463,49 @@ class InversionFromToksProbsChosen(InversionFromToksProbs):
             num_gens=config.num_gens,
         )
 
+    def embed_and_project(
+        self,
+        embedder_input_ids: Optional[torch.Tensor],
+        embedder_attention_mask: Optional[torch.Tensor],
+        frozen_topk_ids: Optional[torch.Tensor] = None,
+        frozen_topk_logprobs: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if frozen_topk_ids is not None and frozen_topk_logprobs is not None:
+            embedder_output = {
+                "topk_ids": frozen_topk_ids,
+                "topk_logprobs": frozen_topk_logprobs,
+            }
+        elif self.embedder_no_grad:
+            with torch.no_grad():
+                embedder_output = self.call_embedding_model(
+                    embedder_input_ids=embedder_input_ids,
+                    embedder_attention_mask=embedder_attention_mask,
+                )
+
+        else:
+            embedder_output = self.call_embedding_model(
+                embedder_input_ids=embedder_input_ids,
+                embedder_attention_mask=embedder_attention_mask,
+            )
+
+        topk_ids = embedder_output["topk_ids"]  # B, num_gens, T, topk+1
+        shape = topk_ids.shape
+        flattened_ids = topk_ids.view(-1)
+        byte_ids = self.token2bytes[flattened_ids]
+        byte_ids = byte_ids.view(*shape, -1)
+
+        embeddings = self.token_embedder(
+            bytes_batch=byte_ids,
+            topk_logprobs=embedder_output["topk_logprobs"],
+        )  # B, num_gens, T, dim
+        embeddings = self.embedding_transform(embeddings)
+        attention_mask = torch.ones(
+            (embeddings.shape[0], embeddings.shape[1]*embeddings.shape[2]
+             ), device=embeddings.device
+        )
+
+        return embeddings, attention_mask
+
     def forward(
         self,
         embedder_input_ids: torch.Tensor,
@@ -486,7 +532,7 @@ class InversionFromToksProbsChosen(InversionFromToksProbs):
 
         encoder_outputs = self.encoder_decoder.encoder(
             input_ids=None,
-            attention_mask=attention_mask,
+            attention_mask=None,
             inputs_embeds=inputs_embeds,
             head_mask=None,
             output_attentions=None,
