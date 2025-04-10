@@ -451,33 +451,29 @@ class InversionFromToksProbsChosen(InversionFromToksProbs):
         )
         self.register_buffer("token2bytes", self.create_byte_embedding())
 
-        self.encoder_decoder.original_forward = self.encoder_decoder.forward
+        self.encoder_decoder.encoder.original_forward = self.encoder_decoder.encoder.forward
 
-        def custom_forward(self,
-                           input_ids: Optional[torch.LongTensor] = None,
-                           attention_mask: Optional[torch.FloatTensor] = None,
-                           decoder_input_ids: Optional[torch.LongTensor] = None,
-                           decoder_attention_mask: Optional[torch.BoolTensor] = None,
-                           head_mask: Optional[torch.FloatTensor] = None,
-                           decoder_head_mask: Optional[torch.FloatTensor] = None,
-                           cross_attn_head_mask: Optional[torch.Tensor] = None,
-                           encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-                           past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-                           inputs_embeds: Optional[torch.FloatTensor] = None,
-                           decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-                           labels: Optional[torch.LongTensor] = None,
-                           use_cache: Optional[bool] = None,
-                           output_attentions: Optional[bool] = None,
-                           output_hidden_states: Optional[bool] = None,
-                           return_dict: Optional[bool] = None,
-                           cache_position: Optional[torch.LongTensor] = None,
-                           ):
+        def custom_encoder_forward(
+                self,
+                input_ids=None,
+                attention_mask=None,
+                encoder_hidden_states=None,
+                encoder_attention_mask=None,
+                inputs_embeds=None,
+                head_mask=None,
+                cross_attn_head_mask=None,
+                past_key_values=None,
+                use_cache=None,
+                output_attentions=None,
+                output_hidden_states=None,
+                return_dict=None,
+                cache_position=None,):
 
             B, num_gens, max_new_tokens, dim = inputs_embeds.shape
             # send each generations separately to encoder
             inputs_embeds = inputs_embeds.view(B*num_gens, max_new_tokens, dim)
 
-            encoder_outputs = self.encoder(
+            encoder_outputs = self.original_forward(
                 input_ids=None,
                 attention_mask=None,
                 inputs_embeds=inputs_embeds,
@@ -492,16 +488,10 @@ class InversionFromToksProbsChosen(InversionFromToksProbs):
                 B, num_gens, max_new_tokens, -1).view(B, num_gens*max_new_tokens, -1)
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=last_hidden_states, hidden_states=None, attentions=None,)
+            return encoder_outputs
 
-            return self.original_forward(
-                encoder_outputs=encoder_outputs,
-                attention_mask=attention_mask,
-                labels=labels,
-                decoder_input_ids=decoder_input_ids,
-                past_key_values=past_key_values,
-            )
-        self.encoder_decoder.forward = types.MethodType(
-            custom_forward, self.encoder_decoder,)
+        self.encoder_decoder.encoder.forward = types.MethodType(
+            custom_encoder_forward, self.encoder_decoder.encoder,)
 
     def load_embedder_and_tokenizer(self, config):
         return load_embedder_and_tokenizer(
