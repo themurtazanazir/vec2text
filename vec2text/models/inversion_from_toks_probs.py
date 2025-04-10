@@ -212,17 +212,18 @@ class TokensLogProbChosenEncoder(nn.Module):
         token_encodings = self.token_encoder(
             bytes_batch
         )  # B, num_gens, T, Topk+1, self.hidden_dim
-        chosen_encodings = token_encodings[..., 0, :]  # B, T, self.hidden_dim
-        # B, T, Topk, self.hidden_dim
+        chosen_encodings = token_encodings[..., 0, :]  # B, num_gens, T, self.hidden_dim
+        # B, num_gens, T, Topk, self.hidden_dim
         token_encodings = token_encodings[..., 1:, :]
-        # B, T, Topk, self.hidden_dim + 1
+
+        # B, num_gens, T, Topk, self.hidden_dim + 1
         chunk_combined = torch.cat(
             [token_encodings, topk_logprobs.unsqueeze(-1)], dim=-1
         )
-        hidden_states = self.combiner(chunk_combined)  # B, T, Topk, 1
-        hidden_states = hidden_states.view(B, max_steps, top_k)  # B, T, Topk
+        hidden_states = self.combiner(chunk_combined)  # B, num_gens, T, Topk, 1
+        hidden_states = hidden_states.view(B, num_gens, max_steps, top_k)  # B, num_gens, T, Topk
         chosen_transformed = self.chosen_transform(
-            chosen_encodings)  # B, T, Topk
+            chosen_encodings)  # B, num_gens, T, Topk
 
         return hidden_states + chosen_transformed
 
