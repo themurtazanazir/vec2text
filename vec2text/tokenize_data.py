@@ -39,8 +39,10 @@ def tokenize_function(
             ]
             for ids in output["input_ids"]
         ]
+        embedder_texts = tokenizer.batch_decode(output["input_ids"], skip_special_tokens=True,)
         embedder_output = embedder_tokenizer(
-            examples[text_column_name],
+            #examples[text_column_name],
+            embedder_texts,
             padding="max_length",
             truncation=True,
             max_length=max_seq_length,
