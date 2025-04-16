@@ -22,7 +22,8 @@ class Embedder(nn.Module):
         self.max_new_tokens = max_new_tokens
 
     def train(self, mode):
-        warnings.warn("Tried to set a mode. This model is permanently set in eval mode")
+        warnings.warn(
+            "Tried to set a mode. This model is permanently set in eval mode")
         return super().train(mode=False)
 
     def get_hidden_states(self, embedder_input_ids, embedder_attention_mask):
@@ -69,7 +70,8 @@ class Embedder(nn.Module):
                 logits = model_output.logits
 
                 p, i = torch.max(logits, dim=-1)
-                next_token = i[torch.arange(B), embedder_attention_mask.sum(-1) - 1]
+                next_token = i[torch.arange(
+                    B), embedder_attention_mask.sum(-1) - 1]
                 embedder_input_ids[torch.arange(B), embedder_attention_mask.sum(-1)] = (
                     next_token
                 )
@@ -124,7 +126,8 @@ class TopKToksLogprobsEmbedder(nn.Module):
         self.tokenizer.padding_side = "left"
 
     def train(self, mode):
-        warnings.warn("Tried to set a mode. This model is permanently set in eval mode")
+        warnings.warn(
+            "Tried to set a mode. This model is permanently set in eval mode")
         return super().train(mode=False)
 
     def load_model_and_tokenizer(self):
@@ -188,7 +191,8 @@ class TopKToksLogprobsChosenEmbedder(nn.Module):
         self.num_gens = num_gens
 
     def train(self, mode):
-        warnings.warn("Tried to set a mode. This model is permanently set in eval mode")
+        warnings.warn(
+            "Tried to set a mode. This model is permanently set in eval mode")
         return super().train(mode=False)
 
     def load_model_and_tokenizer(self):
@@ -221,7 +225,8 @@ class TopKToksLogprobsChosenEmbedder(nn.Module):
         logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
         logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
         topk_logprobs, topk_ids = torch.topk(logprobs, k=top_k, dim=-1)
-        chosen_tokens = output.sequences[:, -self.max_new_tokens :].unsqueeze(-1)
+        chosen_tokens = output.sequences[:, -
+                                         self.max_new_tokens:].unsqueeze(-1)
         topk_ids = torch.cat([chosen_tokens, topk_ids], dim=-1)
         # topk_logprobs = topk_logprobs - topk_logprobs.mean(-1, keepdims=True)
         return topk_logprobs, topk_ids
@@ -265,11 +270,12 @@ class TransformedHiddenStateEmbedder(Embedder, ABC):
         raise NotImplementedError
 
     def get_hidden_states(self, embedder_input_ids, embedder_attention_mask):
-        logprobs = self.get_logprobs(
+        logprobs, chosen_tokens = self.get_logprobs(
             embedder_input_ids=embedder_input_ids,
             embedder_attention_mask=embedder_attention_mask,
         )
-        return self.extract_hidden_state_from_logprobs(logprobs)
+        return {"embeddings": self.extract_hidden_state_from_logprobs(logprobs),
+                "chosen_tokens": chosen_tokens}
 
     def get_logprobs(self, embedder_input_ids, embedder_attention_mask):
         device = next(self.model.parameters()).device
@@ -291,7 +297,9 @@ class TransformedHiddenStateEmbedder(Embedder, ABC):
         ##!!  this part is usually in lms and not in embedder.
         logits = torch.cat([i.unsqueeze(1) for i in output.scores], dim=1)
         logprobs = torch.nn.functional.log_softmax(logits, dim=-1)
-        return logprobs
+        chosen_tokens = output.sequences[:, -
+                                         self.max_new_tokens:].unsqueeze(-1)
+        return logprobs, chosen_tokens
 
 
 class RandomTransformCLREmbedder(TransformedHiddenStateEmbedder, ABC):
@@ -506,7 +514,8 @@ class Llama2ChatRandomKALREmbedder(Llama2KTokensEmbedder):
             # quantization_config=bnb_config,
         )
         model.eval()
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "meta-llama/Llama-2-7b-chat-hf")
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
         return model, tokenizer
@@ -552,7 +561,8 @@ class Llama3ChatRandomKALREmbedder(Llama2KTokensEmbedder):
             # quantization_config=bnb_config,
         )
         model.eval()
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "meta-llama/Llama-3.1-8B-Instruct")
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
         return model, tokenizer
@@ -619,7 +629,8 @@ class Llama2_7BRandomTransformEmbedder(Embedder):
         super(Llama2_7BRandomTransformEmbedder, self).__init__(
             max_length=max_length, max_new_tokens=max_new_tokens
         )
-        self.config = SimpleNamespace(hidden_size=self.model.config.hidden_size + 100)
+        self.config = SimpleNamespace(
+            hidden_size=self.model.config.hidden_size + 100)
 
     def load_model_and_tokenizer(self):
 
