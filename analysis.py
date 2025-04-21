@@ -366,6 +366,12 @@ if __name__ == '__main__':
         trainer.model.eval()
 
         def invert(sys, ins, chat_format):
+
+            def format(system_message, instruction, chat_format):
+                if chat_format:
+                    return f"[INST] <<SYS>>\n{system_message}\n<</SYS>>\n {instruction} [/INST]"
+                else:
+                    return system_message + "\n\n" + instruction
             strings = [format(sys, ins, chat_format).strip()]
             print(f"{strings=}", flush=True)
             t = trainer.embedder_tokenizer
