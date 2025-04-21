@@ -1,5 +1,4 @@
 import json
-import optimize_transfer
 import nltk
 import torch
 import tqdm
@@ -121,7 +120,7 @@ def eval_generation_metrics(
 
 def generate(trainer, embedder_input_ids, embedder_attention_mask, debug=False):
     logprobs = get_logprobs(
-        trainer.model.embedder,
+        trainer.model.embedder.model,
         trainer.embedder_tokenizer,
         embedder_input_ids,
         embedder_attention_mask,
@@ -176,7 +175,7 @@ def _get_decoded_sequences(
                 trainer,
                 embedder_input_ids=inputs_cuda["embedder_input_ids"],
                 embedder_attention_mask=inputs_cuda["embedder_attention_mask"],
-                generation_kwargs=gen_kwargs
+            #    generation_kwargs=gen_kwargs
             )
         if generated_text.shape[1] < max_length:
             # Pad generated text to max length
@@ -364,7 +363,7 @@ if __name__ == '__main__':
     trainer._load_from_checkpoint(ckpt)
     trainer.model.eval()
 
-    val_datasets_dict = get_val_datasets()
+    val_datasets_dict = get_val_datasets(trainer.embedder_tokenizer, experiment, trainer)
     metrics = []
     for key in val_datasets_dict:
         dl = trainer.get_eval_dataloader(val_datasets_dict[key])
@@ -375,3 +374,5 @@ if __name__ == '__main__':
                 "metrics": out,
             }
         )
+
+    print(metrics)
