@@ -125,7 +125,7 @@ def generate(trainer, embedder_input_ids, embedder_attention_mask, debug=False):
         trainer.embedder_tokenizer,
         embedder_input_ids,
         embedder_attention_mask,
-        )
+    )
     logprobs = logprobs[:, :, trainer.model.embedder.chosen_tokens]
     alr = logprobs[:, :, 1:] - logprobs[:, :, 0:1]
     embeddings = model.embedding_transform(alr)
@@ -176,7 +176,7 @@ def _get_decoded_sequences(
                 trainer,
                 embedder_input_ids=inputs_cuda["embedder_input_ids"],
                 embedder_attention_mask=inputs_cuda["embedder_attention_mask"],
-            #    generation_kwargs=gen_kwargs
+                #    generation_kwargs=gen_kwargs
             )
         if generated_text.shape[1] < max_length:
             # Pad generated text to max length
@@ -365,7 +365,31 @@ if __name__ == '__main__':
         trainer._load_from_checkpoint(ckpt)
         trainer.model.eval()
 
-        val_datasets_dict = get_val_datasets(trainer.embedder_tokenizer, experiment, trainer)
+        def invert(sys, ins, chat_format):
+            strings = [format(sys, ins, chat_format).strip()]
+            print(f"{strings=}", flush=True)
+            t = trainer.embedder_tokenizer
+            print(f"{t.padding_side=}")
+            inputs = t(
+                strings,
+                return_tensors="pt",
+                padding="max_length",
+                # max_length=trainer.model.embedder.max_length,
+                max_length=64,
+                truncation=True,
+            )
+            inputs = {f"embedder_{k}": v for k, v in inputs.items()}
+            gen_kwargs = copy.copy(trainer.gen_kwargs)
+            max_length = trainer.model.config.max_seq_length
+            gen_kwargs["max_length"] = max_length
+            outputs = trainer.generate(inputs, generation_kwargs={
+                                       "max_new_tokens": 64})
+            output_strings = trainer.tokenizer.batch_decode(
+                outputs, skip_special_tokens=True)
+            return output_strings[0]
+        output = invert("", "reverse", True)
+        val_datasets_dict = get_val_datasets(
+            trainer.embedder_tokenizer, experiment, trainer)
         metrics = []
         for key in val_datasets_dict:
             dl = trainer.get_eval_dataloader(val_datasets_dict[key])
