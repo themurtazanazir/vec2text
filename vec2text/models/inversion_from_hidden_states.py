@@ -84,6 +84,7 @@ class InversionFromHiddenStatesModel(InversionModel):
                 embedder_attention_mask=embedder_attention_mask,
             )
 
+        embeddings = embeddings["embeddings"] 
         embeddings = self.embedding_transform(embeddings)
         attention_mask = torch.ones(
             (embeddings.shape[0], embeddings.shape[1]),
