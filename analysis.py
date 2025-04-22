@@ -342,7 +342,7 @@ if __name__ == '__main__':
 
     with torch.inference_mode():
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        cmd = "--per_device_train_batch_size 25 --per_device_eval_batch_size 25 --max_seq_length 64 --num_train_epochs 100 --max_eval_samples 1000 --eval_steps 25000 --warmup_steps 25000 --learning_rate 0.0002 --dataset_name one_million_instructions --model_name_or_path t5-base --use_wandb=0 --experiment inversion_from_hidden_states --bf16=1 --embedder_torch_dtype bfloat16 --lr_scheduler_type constant_with_warmup --use_frozen_embeddings_as_input 1 --mock_embedder 1 --embedder_model_name llama2_chat-random_k-alr --max_new_tokens 16 --output_dir /home/mnazir/vec2text/data/test/experiments/llama2_chat-random_k-alr-16-toks-bugfix-4-nodes/ --exp_group_name llama2-chat --extra_tokens 100"
+        cmd = "--per_device_train_batch_size 5 --per_device_eval_batch_size 5 --max_seq_length 64 --num_train_epochs 100 --max_eval_samples 1000 --eval_steps 25000 --warmup_steps 25000 --learning_rate 0.0002 --dataset_name one_million_instructions --model_name_or_path t5-base --use_wandb=0 --experiment inversion_from_hidden_states --bf16=1 --embedder_torch_dtype bfloat16 --lr_scheduler_type constant_with_warmup --use_frozen_embeddings_as_input 1 --mock_embedder 1 --embedder_model_name llama2_chat-random_k-alr --max_new_tokens 16 --output_dir /home/mnazir/vec2text/data/test/experiments/llama2_chat-random_k-alr-16-toks-bugfix-4-nodes/ --exp_group_name llama2-chat --extra_tokens 100"
 
         parser = transformers.HfArgumentParser(
             (ModelArguments, DataArguments, TrainingArguments)
@@ -398,12 +398,12 @@ if __name__ == '__main__':
         metrics = []
         for key in val_datasets_dict:
             dl = trainer.get_eval_dataloader(val_datasets_dict[key])
-            out = eval_generation_metrics(trainer, dl)
+            out1 = eval_generation_metrics(trainer, dl)
             metrics.append(
                 {
                     "ds": key,
-                    "metrics": out,
+                    "metrics1": out1,
                 }
             )
-
-        print(metrics)
+        with open("metrics3.json", "w") as f:
+            json.dump(metrics, f)
