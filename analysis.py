@@ -118,7 +118,7 @@ def eval_generation_metrics(
     return metrics
 
 
-def generate(trainer, embedder_input_ids, embedder_attention_mask, debug=False):
+def generate(trainer, embedder_input_ids, embedder_attention_mask, generation_kwargs, debug=False):
     """inputs prompt tokens to generate prompt tokens"""
     logprobs = get_logprobs(
         trainer.model.embedder.model,
@@ -139,8 +139,7 @@ def generate(trainer, embedder_input_ids, embedder_attention_mask, debug=False):
         # optional: input IDs (for starting generation).
         # typically not set unless generating prefixes for
         # reranking.
-        max_new_tokens=64,
-        # **generation_kwargs,
+        **generation_kwargs,
     )
     return output
 
@@ -176,7 +175,7 @@ def _get_decoded_sequences(
                 trainer,
                 embedder_input_ids=inputs_cuda["embedder_input_ids"],
                 embedder_attention_mask=inputs_cuda["embedder_attention_mask"],
-                #    generation_kwargs=gen_kwargs
+                generation_kwargs=gen_kwargs
             )
         if generated_text.shape[1] < max_length:
             # Pad generated text to max length
