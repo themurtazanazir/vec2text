@@ -78,13 +78,15 @@ class InversionFromHiddenStatesModel(InversionModel):
                     embedder_input_ids=embedder_input_ids,
                     embedder_attention_mask=embedder_attention_mask,
                 )
+
+                embeddings = embeddings["embeddings"]
         else:
             embeddings = self.call_embedding_model(
                 embedder_input_ids=embedder_input_ids,
                 embedder_attention_mask=embedder_attention_mask,
             )
 
-        embeddings = embeddings["embeddings"] 
+            embeddings = embeddings["embeddings"]
         embeddings = self.embedding_transform(embeddings)
         attention_mask = torch.ones(
             (embeddings.shape[0], embeddings.shape[1]),
@@ -210,7 +212,8 @@ class ReverseInversionFromHiddenStatesModel(InversionFromHiddenStatesModel):
         result = tokens.clone()
 
         for i in range(len(tokens)):
-            non_pad_mask = (tokens[i] != pad_token_id) & (tokens[i] != eos_token_id)
+            non_pad_mask = (tokens[i] != pad_token_id) & (
+                tokens[i] != eos_token_id)
             non_pad_tokens = tokens[i][non_pad_mask]
 
             reversed_tokens = torch.flip(non_pad_tokens, [0])
