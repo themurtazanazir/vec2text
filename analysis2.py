@@ -66,7 +66,9 @@ def invert(sys, ins, chat_format, model):
 
 
 def invert2(sys, ins, chat_format, model):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model
+    model = model.to(device)
     target_llm = model.embedder
     target_tokenizer = model.embedder_tokenizer
     inverter_tokenizer = model.tokenizer
@@ -74,25 +76,36 @@ def invert2(sys, ins, chat_format, model):
     inverter = model.encoder_decoder
     
     strings = [format(sys, ins, chat_format).strip()]
-    inverter_tokens = inverter_tokenizer(strings, return_tensors="pt")
+    label_strings = [format(sys, ins, chat_format=False).strip()]
+    inverter_tokens = inverter_tokenizer(label_strings, return_tensors="pt")
     target_tokens = target_tokenizer(strings, return_tensors="pt")
     target_tokens = {f"embedder_{k}":v for k,v in target_tokens.items()}
+    inverter_tokens = {k:v.to(device) for k,v in inverter_tokens.items()}
+    target_tokens = {k:v.to(device) for k,v in target_tokens.items()}
 
     #target_output= target_llm(**target_tokens)
     embeds, attn_mask = model.embed_and_project(**target_tokens)
     gen_kwargs = {}#copy.copy(trainer.gen_kwargs)
     max_length = model.config.max_seq_length
     gen_kwargs["max_length"] = max_length
-    return inverter_tokenizer.batch_decode(inverter.generate(
-            # required: input embeddings
-            inputs_embeds=embeds,
-            attention_mask=attn_mask,
-            # optional: input IDs (for starting generation).
-            # typically not set unless generating prefixes for
-            # reranking.
-            **gen_kwargs,
-            ))
+    output = inverter(inputs_embeds=embeds,labels=inverter_tokens["input_ids"], attention_mask=attn_mask)
+    print(f"{inverter_tokens['input_ids']=}")
+    print(f"{torch.max(output.logits, axis=-1)[1]=}")
+    return inverter_tokenizer.batch_decode(torch.max(output.logits, axis=-1)[1])
+   # output = inverter.generate(
+   #         # required: input embeddings
+   #         inputs_embeds=embeds,
+   #         attention_mask=attn_mask,
+   #         # optional: input IDs (for starting generation).
+   #         # typically not set unless generating prefixes for
+   #         # reranking.
+   #         **gen_kwargs,
+   #         output_scores=True,
+   #         return_dict_in_generate=True,
+   #         )
+    return output
+    return output.logits, inverter_tokenizer.batch_decode(output.sequences)
 
 print(model)
-print(invert("", "reverse this string", True, model))
-print(invert2("", "reverse this string", True, model))
+print(invert("", "Reverse this string", True, model))
+print(invert2("", "Reverse this string", True, model))
