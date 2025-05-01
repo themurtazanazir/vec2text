@@ -88,6 +88,8 @@ def load_synthetic_gpts() -> datasets.DatasetDict:
         sample["system"] = tokenizer.decode([i for i in sample["system_prompt"] if i!= -100], skip_special_tokens=True)
 
         sample["text"] = sample["system"] + "\n\n" + sample["user"]
+        sample["prefix"] = sample["system"] + "\n\n"
+        sample["suffix"] = sample["user"]
         return sample
 
     return dataset_dict.map(decode)
