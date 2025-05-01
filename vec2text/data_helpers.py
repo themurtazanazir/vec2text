@@ -70,6 +70,29 @@ def load_one_million_instructions() -> datasets.Dataset:
     return dataset_dict["train"]
 
 
+def load_synthetic_gpts() -> datasets.DatasetDict:
+    custom_data_root = os.environ.get("CUSTOM_DATASET_ROOT")
+    assert custom_data_root, "`synthetic_gpts` could not be loaded. Please set the environ"
+    "variable `CUSTOM_DATASET_ROOT`"
+    train_ds = datasets.load_from_disk(os.path.join(custom_data_root, "train", "synthetic_gpts"))
+    test_ds = datasets.load_from_disk(os.path.join(custom_data_root, "test", "synthetic_gpts"))
+    dataset_dict = datasets.DatasetDict()
+    dataset_dict["train"] = train_ds
+    dataset_dict["validation"] = test_ds
+
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+
+    def decode(sample):
+        sample["user"] = "Give me 16 short sentences that best describe yourself. Start with \"1:\""
+        sample["system"] = tokenizer.decode([i for i in sample["system_prompt"] if i!= -100], skip_special_tokens=True)
+
+        sample["text"] = sample["system"] + "\n\n" + sample["user"]
+        return sample
+
+    return dataset_dict.map(decode)
+
+
 def load_anthropic_toxic_prompts() -> datasets.Dataset:
     d = datasets.load_dataset("wentingzhao/anthropic-hh-first-prompt")["train"]
     d = d.rename_column("user", "text")
@@ -112,6 +135,8 @@ def dataset_from_args(data_args: DataArguments) -> datasets.DatasetDict:
                 "validation": all_luar_datasets["queries"],
             }
         )
+    elif data_args.dataset_name == "synthetic_gpts":
+        raw_datasets = load_synthetic_gpts()
     else:
         raise ValueError(f"unsupported dataset {data_args.dataset_name}")
     return raw_datasets
