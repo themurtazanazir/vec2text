@@ -197,6 +197,11 @@ class ModelArguments:
             "choices": FREEZE_STRATEGIES,
         },
     )
+    pretrained_path: Optional[str] = field(
+            default=None,
+            metadata={
+                "help":"checkpoint path to load model weights"
+                })
 
     def __post_init__(self):
         if self.config_overrides is not None and (
