@@ -680,6 +680,14 @@ class InversionExperiment(Experiment):
             tokenizer=model.tokenizer,
             embedder_tokenizer=model.embedder_tokenizer,
         )
+        if 'frozen_embeddings' in train_dataset.column_names:
+            train_dataset = train_dataset.map(lambda x: {"embedder_input_ids":[None]*len(train_dataset), 
+                                                         "embedder_attention_mask": [None]*len(train_dataset),
+                                                         })
+        if 'frozen_embeddings' in eval_dataset.column_names:
+            eval_dataset = eval_dataset.map(lambda x: {"embedder_input_ids":[None]*len(eval_dataset), 
+                                                         "embedder_attention_mask": [None]*len(eval_dataset),
+                                                         })
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(
             f"Training model with name `{self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
