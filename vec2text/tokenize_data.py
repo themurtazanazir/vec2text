@@ -106,9 +106,7 @@ def tokenize_function_llama_chat(
         ]
         embedder_output = embedder_tokenizer(
             text=formatted_text,
-            padding="max_length",
-            truncation=True,
-            max_length=max_seq_length,
+            padding=True,
             return_tensors="pt",
         )
         embedder_output = {f"embedder_{k}": v for k, v in embedder_output.items()}
