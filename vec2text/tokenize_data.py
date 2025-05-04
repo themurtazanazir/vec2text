@@ -46,7 +46,8 @@ def tokenize_function(
             max_length=max_seq_length,
             return_tensors="pt",
         )
-        embedder_output = {f"embedder_{k}": v for k, v in embedder_output.items()}
+        embedder_output = {f"embedder_{k}": v for k,
+                           v in embedder_output.items()}
 
         output["length"] = [
             (torch.tensor(input_ids) != tokenizer.pad_token_id).sum().item()
@@ -82,7 +83,8 @@ def tokenize_function_llama_chat(
             examples["suffix"] = examples[text_column_name]
 
         formatted_text = [
-            f"[INST] <<SYS>>\n{system_message}\n<</SYS>>\n {instruction} [/INST]"
+            f"[INST] <<SYS>>\n{
+                system_message}\n<</SYS>>\n {instruction} [/INST]"
             for (system_message, instruction) in zip(
                 examples["prefix"], examples["suffix"]
             )
@@ -109,7 +111,8 @@ def tokenize_function_llama_chat(
             padding=True,
             return_tensors="pt",
         )
-        embedder_output = {f"embedder_{k}": v for k, v in embedder_output.items()}
+        embedder_output = {f"embedder_{k}": v for k,
+                           v in embedder_output.items()}
 
         output["length"] = [
             (torch.tensor(input_ids) != tokenizer.pad_token_id).sum().item()
@@ -179,7 +182,8 @@ def tokenize_generic_chat_models(
             max_length=max_seq_length,
             return_tensors="pt",
         )
-        embedder_output = {f"embedder_{k}": v for k, v in embedder_output.items()}
+        embedder_output = {f"embedder_{k}": v for k,
+                           v in embedder_output.items()}
 
         output["length"] = [
             (torch.tensor(input_ids) != tokenizer.pad_token_id).sum().item()
@@ -205,10 +209,17 @@ def embed_dataset_batch(model: InversionModel, batch: Dict) -> Dict:
     #    return_tensors="pt",
     # ).to(next(model.parameters()).device)
 
+    embedder_input_ids = batch["embedder_input_ids"]
+    embedder_attention_mask = batch["embedder_attention_mask"]
+
+    embedder_input_ids = torch.nn.utils.rnn.pad_sequence(
+        embedder_input_ids, batch_first=True, padding_value=model.embedder_tokenizer.pad_token_id, padding_side='left',)
+    embedder_attention_mask = torch.nn.utils.rnn.pad_sequence(
+        embedder_attention_mask, batch_first=True, padding_value=0, padding_side='left',)
     with torch.no_grad():
         embedding_result = model.call_embedding_model(
-            embedder_input_ids=batch["embedder_input_ids"],
-            embedder_attention_mask=batch["embedder_attention_mask"],
+            embedder_input_ids=embedder_input_ids,
+            embedder_attention_mask=embedder_attention_mask,
         )
 
     if isinstance(embedding_result, dict):
@@ -253,6 +264,7 @@ def get_tokenizer_mapping(
 
     preservation = len(set(mapping.tolist())) / len(lm_vocab)
     print(
-        f"Mapped tokenizer {lm} to {inverter}. Preserved {preservation*100:.1f}% of unique tokens."
+        f"Mapped tokenizer {lm} to {inverter}."
+        f"Preserved {preservation*100:.1f}% of unique tokens."
     )
     return mapping
