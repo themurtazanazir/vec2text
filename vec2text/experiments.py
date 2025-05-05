@@ -681,13 +681,22 @@ class InversionExperiment(Experiment):
             embedder_tokenizer=model.embedder_tokenizer,
         )
         if 'frozen_embeddings' in train_dataset.column_names:
-            train_dataset = train_dataset.map(lambda x: {"embedder_input_ids":[None]*len(train_dataset), 
-                                                         "embedder_attention_mask": [None]*len(train_dataset),
+            train_dataset = train_dataset.map(lambda x: {"embedder_input_ids":torch.zeros(2,2), 
+                                                         "embedder_attention_mask":torch.zeros(2,2),
                                                          })
-        if 'frozen_embeddings' in eval_dataset.column_names:
-            eval_dataset = eval_dataset.map(lambda x: {"embedder_input_ids":[None]*len(eval_dataset), 
-                                                         "embedder_attention_mask": [None]*len(eval_dataset),
-                                                         })
+            train_dataset.set_format('pt')
+        for ds_name, ds in eval_dataset.items():
+            if 'frozen_embeddings' in ds.column_names:
+                eval_dataset[ds_name] = ds.map(lambda x: {"embedder_input_ids":torch.zeros(2,2), 
+                                                             "embedder_attention_mask": torch.zeros(2,2),
+                                                             })
+            eval_dataset.set_format('pt')
+        # print(f"{train_dataset=}")
+        # print(f"{eval_dataset=}")
+        # for _, ds in eval_dataset.items():
+        #     print(f"{ds['embedder_input_ids'][0]=}")
+        # import sys
+        # sys.exit()
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(
             f"Training model with name `{self.model_args.model_name_or_path}` - Total size={n_params/2**20:.2f}M params"
