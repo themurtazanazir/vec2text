@@ -144,14 +144,16 @@ def tokenize_generic_chat_models(
             examples["prefix"] = [""] * len(examples[text_column_name])
             examples["suffix"] = examples[text_column_name]
 
-        formatted_text = [
+        embedder_output = [
             embedder_tokenizer.apply_chat_template(
                 [
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": instruction},
                 ],
-                tokenize=False,
+                tokenize=True,
                 add_generation_prompt=True,
+                padding=True,
+                return_tensors="pt",
             )
             for (system_message, instruction) in zip(
                 examples["prefix"], examples["suffix"]
@@ -174,13 +176,6 @@ def tokenize_generic_chat_models(
             ]
             for ids in output["input_ids"]
         ]
-        embedder_output = embedder_tokenizer(
-            text=formatted_text,
-            padding="max_length",
-            truncation=True,
-            max_length=max_seq_length,
-            return_tensors="pt",
-        )
         embedder_output = {f"embedder_{k}": v for k,
                            v in embedder_output.items()}
 
