@@ -99,9 +99,11 @@ def load_awesomegpt_prompts() -> datasets.DatasetDict:
     assert custom_data_root, "`awesomegpt_prompts` could not be loaded. Please set the environ variable `CUSTOM_DATASET_ROOT`"
     #train_ds = datasets.load_from_disk(os.path.join(custom_data_root, "train", "awesomegpt_prompts"))
     test_ds = datasets.load_from_disk(os.path.join(custom_data_root, "test", "awesomegpt_prompts"))
-    #dataset_dict = datasets.DatasetDict()
-    #dataset_dict["train"] = train_ds
-    #dataset_dict["validation"] = test_ds
+    train_ds = test_ds.select(range(50))
+    test_ds = test_ds.select(range(50, len(test_ds)))
+    dataset_dict = datasets.DatasetDict()
+    dataset_dict["train"] = train_ds
+    dataset_dict["validation"] = test_ds
 
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained("t5-base")
@@ -115,8 +117,33 @@ def load_awesomegpt_prompts() -> datasets.DatasetDict:
         sample["suffix"] = sample["user"]
         return sample
 
-    return test_ds.map(decode)
+    return dataset_dict.map(decode)
 
+
+def load_real_gpts() -> datasets.DatasetDict:
+    custom_data_root = os.environ.get("CUSTOM_DATASET_ROOT")
+    assert custom_data_root, "`awesomegpt_prompts` could not be loaded. Please set the environ variable `CUSTOM_DATASET_ROOT`"
+    #train_ds = datasets.load_from_disk(os.path.join(custom_data_root, "train", "awesomegpt_prompts"))
+    test_ds = datasets.load_from_disk(os.path.join(custom_data_root, "test", "real_gpts_arrow"))
+    train_ds = test_ds.select(range(50))
+    test_ds = test_ds.select(range(50, len(test_ds)))
+    dataset_dict = datasets.DatasetDict()
+    dataset_dict["train"] = train_ds
+    dataset_dict["validation"] = test_ds
+
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+
+    def decode(sample):
+        sample["user"] = "Give me 16 short sentences that best describe yourself. Start with \"1:\""
+        sample["system"] = tokenizer.decode([i for i in sample["system_prompt"] if i!= -100], skip_special_tokens=True)
+
+        sample["text"] = sample["system"] + "\n\n" + sample["user"]
+        sample["prefix"] = sample["system"] + "\n\n"
+        sample["suffix"] = sample["user"]
+        return sample
+
+    return dataset_dict.map(decode)
 
 def load_anthropic_toxic_prompts() -> datasets.Dataset:
     d = datasets.load_dataset("wentingzhao/anthropic-hh-first-prompt")["train"]
@@ -162,6 +189,10 @@ def dataset_from_args(data_args: DataArguments) -> datasets.DatasetDict:
         )
     elif data_args.dataset_name == "synthetic_gpts":
         raw_datasets = load_synthetic_gpts()
+    elif data_args.dataset_name == "awesomegpt_prompts":
+        raw_datasets = load_awesomegpt_prompts()
+    elif data_args.dataset_name == "real_gpts":
+        raw_datasets = load_real_gpts()
     else:
         raise ValueError(f"unsupported dataset {data_args.dataset_name}")
     return raw_datasets
@@ -299,7 +330,8 @@ def load_standard_val_datasets() -> datasets.DatasetDict:
         # "xsum_doc": load_xsum_val("document"),
         # "xsum_summ": load_xsum_val("summary"),
         "wikibio": load_wikibio_val(),
-        "awesomegpt_prompts": load_awesomegpt_prompts(),
+        "awesomegpt_prompts": load_awesomegpt_prompts()["validation"],
+        "real_gpts": load_real_gpts()["validation"],
     }
     d = {k: retain_dataset_columns(v, ["text"]) for k, v in d.items()}
 
