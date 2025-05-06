@@ -38,6 +38,7 @@ from vec2text.tokenize_data import (
     tokenize_function_llama_chat,
     tokenize_generic_chat_models,
 )
+from vec2text.collator import DataCollatorForInversion
 from vec2text.utils import MockEmbedder, dataset_map_multi_worker, get_num_proc
 
 # Allow W&B to start slowly.
@@ -367,7 +368,7 @@ class Experiment(abc.ABC):
         return tokenizer
 
     def get_collator(
-        self, tokenizer: transformers.PreTrainedTokenizer
+        self, tokenizer: transformers.PreTrainedTokenizer,
     ) -> transformers.DataCollatorForSeq2Seq:
         return transformers.DataCollatorForSeq2Seq(
             tokenizer,
@@ -718,7 +719,21 @@ class InversionExperiment(Experiment):
             args=self.training_args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            data_collator=self.get_collator(tokenizer=model.tokenizer),
+            data_collator=self.get_collator(tokenizer=model.tokenizer, embedder_tokenizer=model.embedder_tokenizer),
+        )
+
+    def get_collator(
+        self, tokenizer: transformers.PreTrainedTokenizer, embedder_tokenizer,
+    ) -> transformers.DataCollatorForSeq2Seq:
+        #return transformers.DataCollatorForSeq2Seq(
+        return DataCollatorForInversion(
+            tokenizer,
+            embedder_tokenizer,
+            model=None,
+            label_pad_token_id=-100,
+            padding="max_length",
+            max_length=self.model_args.max_seq_length,
+            pad_to_multiple_of=8 if self.training_args.fp16 else None,
         )
 
 
