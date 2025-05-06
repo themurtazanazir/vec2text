@@ -148,16 +148,14 @@ def tokenize_generic_chat_models(
             [
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": instruction},
+                ]
+                for (system_message, instruction) in zip(examples["prefix"], examples["suffix"])
             ],
-            for (system_message, instruction) in zip(
-                examples["prefix"], examples["suffix"]
-            )
-        ],
-
             tokenize=True,
             add_generation_prompt=True,
             padding=True,
             return_tensors="pt",
+            return_dict=True,
         )
         output = tokenizer(
             examples[text_column_name],  # dont invert in the chat format
