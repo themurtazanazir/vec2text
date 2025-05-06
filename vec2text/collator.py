@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Union, Any
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning
-from transformers.data.utils import PaddingStrategy
+from transformers.utils import PaddingStrategy
 import numpy as np
 
 import transformers
