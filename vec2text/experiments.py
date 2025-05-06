@@ -397,7 +397,13 @@ class Experiment(abc.ABC):
         )
 
         tokenize_fn = (
-            tokenize_function_llama_chat if self.is_llama_chat else tokenize_function
+            tokenize_generic_chat_models
+            if self.is_chat_model
+            else (
+                tokenize_function_llama_chat
+                if self.is_llama_chat
+                else tokenize_function
+            )
         )
         for key in raw_datasets:
             raw_datasets[key] = dataset_map_multi_worker(
