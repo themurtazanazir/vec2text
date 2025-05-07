@@ -12,6 +12,19 @@ def optimize_transform(llama_unembed, other_logprobs, llama_overlap_toks, other_
 
     return llama2_hidden_state.T
 
+def optimize_transform_alr(llama_unembed, other_logprobs, llama_overlap_toks, other_overlap_toks):
+
+
+    W = llama_unembed[llama_overlap_toks]
+    B = other_logprobs.T[other_overlap_toks]
+    #B = B - B.mean(axis=0, keepdims=True)
+    B = B - B[0]#.mean(axis=0, keepdims=True)
+
+    llama2_hidden_state, *_ = torch.linalg.lstsq(
+            W.float(),B.float() )
+
+    return llama2_hidden_state.T
+
 def optimize_transform_matt(llama_unembed, other_logprobs, llama_overlap_toks, other_overlap_toks):
     llama_unembed_and_alr = llama_unembed - llama_unembed[[llama_overlap_toks[0]]]
     other_output = other_logprobs - other_logprobs[:, [other_overlap_toks[0]]]
