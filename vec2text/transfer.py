@@ -72,7 +72,7 @@ def get_overlap_toks(llama2_tokenizer, other_tokenizer, llama2_chosen_toks):
     return llama_overlap_toks, other_overlap_toks
 
 
-def get_logprobs(model, tokenizer, embedder_input_ids, embedder_attention_mask):
+def get_logprobs(model, tokenizer, embedder_input_ids, embedder_attention_mask, max_new_tokens):
     # inputs = tokenizer(strings, return_tensors='pt', padding='max_length',
     #         # max_length=trainer.model.embedder.max_length,
     #         max_length=64,
@@ -85,7 +85,7 @@ def get_logprobs(model, tokenizer, embedder_input_ids, embedder_attention_mask):
     output = model.generate(
         input_ids=embedder_input_ids,
         attention_mask=embedder_attention_mask,
-        max_new_tokens=16,
+        max_new_tokens=max_new_tokens,
         do_sample=False,
         temperature=1,
         top_p=None,
@@ -101,9 +101,16 @@ def get_logprobs(model, tokenizer, embedder_input_ids, embedder_attention_mask):
     return logprobs
 
 
-def generate(embedder_input_ids, embedder_attention_mask, optimize_fn, debug=False):
+def generate(embedder_input_ids, embedder_attention_mask, optimize_fn, generation_steps_to_use, debug=False):
+
+    llama_overlap_toks, other_overlap_toks = get_overlap_toks(
+        trainer.embedder_tokenizer, other_tokenizer, model.embedder.chosen_tokens
+    )
+    # messages = [{"role":"system", "content":sys},{"role":"user", "content":prompt}]
+    # text = other_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     other_logprobs = get_logprobs(
-        other_llm, other_tokenizer, embedder_input_ids, embedder_attention_mask
+        other_llm, other_tokenizer, embedder_input_ids, embedder_attention_mask,
+            max_new_tokens=generation_steps_to_use
     )
     if optimize_fn is not None:
         llama_overlap_toks, other_overlap_toks = get_overlap_toks(
@@ -131,12 +138,32 @@ def generate(embedder_input_ids, embedder_attention_mask, optimize_fn, debug=Fal
     else:
         # assuming TOKENIZER IS EXACTLY same
         llama2_logprobs = other_logprobs
+    print(f"{other_logprobs.shape=}")
+    if debug:
+        _, decoded = torch.max(other_logprobs, dim=-1)
+        decoded_string = other_tokenizer.decode(decoded)
+        print(f"{decoded_string=}")
+    import numpy as np
+
+    llama_unembed = model.embedder.model.lm_head.weight.data.float()
+    batch_hidden_states = []
+    for lps in other_logprobs:
+        llama2_hidden_state = optimize_fn(
+            llama_unembed, lps, llama_overlap_toks, other_overlap_toks
+            )
+        batch_hidden_states.append(llama2_hidden_state)
+    batch_hidden_states = torch.stack(batch_hidden_states)  # b x max_toks x dims
+    # b x max_toks x vocab
+    llama2_logits = batch_hidden_states @ llama_unembed.T
+    llama2_logprobs = torch.nn.functional.log_softmax(llama2_logits, dim=-1)
     llama2_logprobs = llama2_logprobs[:, :, model.embedder.chosen_tokens]
     alr = llama2_logprobs[:, :, 1:] - llama2_logprobs[:, :, 0:1]
     embeddings = model.embedding_transform(alr)
     attention_mask = torch.ones(
         (embeddings.shape[0], embeddings.shape[1]), device=embeddings.device
     )
+
+    print(f"{embeddings.shape=}")
     output = model.encoder_decoder.generate(
         # required: input embeddings
         inputs_embeds=embeddings,
@@ -144,7 +171,7 @@ def generate(embedder_input_ids, embedder_attention_mask, optimize_fn, debug=Fal
         # optional: input IDs (for starting generation).
         # typically not set unless generating prefixes for
         # reranking.
-        max_new_tokens=64,
+        max_length=64,
         # **generation_kwargs,
     )
     return output
@@ -154,7 +181,8 @@ def generate(embedder_input_ids, embedder_attention_mask, optimize_fn, debug=Fal
 
 
 def eval_generation_metrics(
-    trainer, dataloader: torch.utils.data.DataLoader, transform_fn
+    trainer, dataloader: torch.utils.data.DataLoader, transform_fn,
+    generation_steps_to_use=16,
 ) -> Dict[str, float]:
     # Get decoded text. Note that this is different than `preds`, which
     # is used to compute the loss.
@@ -163,6 +191,7 @@ def eval_generation_metrics(
         dataloader=dataloader,
         n=10000,
         transform_fn=transform_fn,
+        generation_steps_to_use=generation_steps_to_use,
     )
 
     # Log BLEU, log table of text.
@@ -254,6 +283,7 @@ def _get_decoded_sequences(
     dataloader: torch.utils.data.DataLoader,
     n: int,
     transform_fn,
+    generation_steps_to_use=None,
 ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
     """Iterates through eval dataset and does decoding.
 
@@ -281,6 +311,7 @@ def _get_decoded_sequences(
                 embedder_input_ids=inputs_cuda["embedder_input_ids"],
                 embedder_attention_mask=inputs_cuda["embedder_attention_mask"],
                 optimize_fn=transform_fn,
+                generation_steps_to_use=generation_steps_to_use,
                 # generation_kwargs=gen_kwargs
             )
         if generated_text.shape[1] < max_length:
@@ -386,6 +417,8 @@ def get_val_datasets():
 
     raw_datasets = dataset_from_args(experiment.data_args)
     val_datasets_dict = load_standard_val_datasets()
+    for ds_name in ["wikibio", "arxiv", "ag_news", ]:
+        val_datasets_dict.pop(ds_name)
     val_datasets_dict["one_million_instructions"] = raw_datasets["validation"]
 
     for name, dataset in val_datasets_dict.items():
@@ -419,7 +452,7 @@ def get_val_datasets():
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-cmd = "--per_device_train_batch_size 250 --per_device_eval_batch_size 250 --max_seq_length 64 --num_train_epochs 100 --max_eval_samples 1000 --eval_steps 25000 --warmup_steps 25000 --learning_rate 0.0002 --dataset_name one_million_instructions --model_name_or_path t5-base --use_wandb=0 --experiment inversion_from_hidden_states --bf16=1 --embedder_torch_dtype bfloat16 --lr_scheduler_type constant_with_warmup --use_frozen_embeddings_as_input 1 --mock_embedder 1 --embedder_model_name llama2_chat-random_k-alr --max_new_tokens 16 --output_dir /home/mnazir/vec2text/data/test/experiments/llama2_chat-random_k-alr-16-toks-bugfix-4-nodes/ --exp_group_name llama2-chat --extra_tokens 100"
+cmd = "--per_device_train_batch_size 250 --per_device_eval_batch_size 250 --max_seq_length 64 --num_train_epochs 100 --max_eval_samples 1000 --eval_steps 25000 --warmup_steps 25000 --learning_rate 0.0002 --dataset_name one_million_instructions --model_name_or_path t5-base --use_wandb=0 --experiment inversion_from_hidden_states --bf16=1 --embedder_torch_dtype bfloat16 --lr_scheduler_type constant_with_warmup --use_frozen_embeddings_as_input 1 --mock_embedder 0 --embedder_model_name llama2_chat-random_k-alr --max_new_tokens 16 --output_dir /home/mnazir/vec2text/data/test/experiments/llama2_chat-random_k-alr-16-toks-bugfix-4-nodes/ --exp_group_name llama2-chat --extra_tokens 100"
 
 
 parser = transformers.HfArgumentParser(
@@ -451,8 +484,8 @@ trainer.model.eval()
 # other_llm_name = "meta-llama/Llama-3.1-8B-Instruct"
 # other_llm_name = "google/gemma-3-4b-it"
 # other_llm_name = "meta-llama/Llama-2-7b-chat-hf"
-# other_llm_name = "mistralai/Mistral-7B-Instruct-v0.3"
-other_llm_name = "meta-llama/Llama-2-13b-chat-hf"
+other_llm_name = "mistralai/Mistral-7B-Instruct-v0.3"
+#other_llm_name = "meta-llama/Llama-2-13b-chat-hf"
 other_llm = AutoModelForCausalLM.from_pretrained(
     other_llm_name, torch_dtype=torch.bfloat16
 )
@@ -468,24 +501,25 @@ print(output)
 
 val_datasets_dict = get_val_datasets()
 metrics = []
-for key in val_datasets_dict:
-    for transform_fn in [
-#         optimize_transfer.optimize_transform,
-#         optimize_transfer.optimize_transform_matt,
-None # No transform
-    ]:
-        dl = trainer.get_eval_dataloader(val_datasets_dict[key])
-        out = eval_generation_metrics(trainer, dl, transform_fn=transform_fn)
-        metrics.append(
-            {
-                "ds": key,
-                "tranform_fn": transform_fn.__name__ if transform_fn else None,
-                "metrics": out,
-                "embedder": other_llm_name,
-            }
-        )
+for gen_steps in [16, 32]:
+    for key in val_datasets_dict:
+        for transform_fn in [
+            optimize_transfer.optimize_transform,
+            #optimize_transfer.optimize_transform_matt,
+        ]:
+            dl = trainer.get_eval_dataloader(val_datasets_dict[key])
+            out = eval_generation_metrics(trainer, dl, transform_fn=transform_fn,  generation_steps_to_use=gen_steps)
+            metrics.append(
+                {
+                    "ds": key,
+                    "tranform_fn": transform_fn.__name__,
+                    "metrics": out,
+                    "embedder": other_llm_name,
+                    "gen_steps":gen_steps,
+                }
+            )
 
-with open(f"transform_metrics_None_{other_llm_name.replace('/', '__')}.json", "w") as f:
+with open(f"transform_metrics_{other_llm_name.replace('/', '__')}_new_test.json", "w") as f:
     json.dump(metrics, f, indent=4)
 # val_datasets_dict = load_standard_val_datasets()
 # for name, dataset in val_datasets_dict.items():
