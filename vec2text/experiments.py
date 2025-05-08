@@ -508,6 +508,10 @@ class Experiment(abc.ABC):
             )
         )
         for key in val_datasets_dict:
+            cols_to_remove = []
+            for col in ["text", "prefix", "suffix"]:
+                if col in val_datasets_dict[key].column_names:
+                    cols_to_remove.append(col)
             val_datasets_dict[key] = dataset_map_multi_worker(
                 dataset=val_datasets_dict[key],
                 map_fn=tokenize_fn(
@@ -517,7 +521,7 @@ class Experiment(abc.ABC):
                     max_seq_length=self.model_args.max_seq_length,
                     padding=False,
                 ),
-                remove_columns=["text", "prefix", "suffix"],
+                remove_columns=cols_to_remove,
                 batched=True,
                 batch_size=1024,
                 num_proc=get_num_proc(),
