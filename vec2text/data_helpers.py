@@ -9,6 +9,7 @@ import torch
 from vec2text.run_args import DataArguments
 from vec2text.utils import dataset_map_multi_worker, get_num_proc
 
+STATIC_USER_PROMPT = ""
 
 def retain_dataset_columns(
     d: datasets.Dataset, allowed_columns: List[str]
@@ -83,7 +84,8 @@ def load_synthetic_gpts() -> datasets.DatasetDict:
     tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     def decode(sample):
-        sample["user"] = "Give me 16 short sentences that best describe yourself. Start with \"1:\""
+        #sample["user"] = "Give me 16 short sentences that best describe yourself. Start with \"1:\""
+        sample["user"] = STATIC_USER_PROMPT
         sample["system"] = tokenizer.decode([i for i in sample["system_prompt"] if i!= -100], skip_special_tokens=True)
 
         sample["text"] = sample["system"] + "\n\n" + sample["user"]
@@ -109,7 +111,8 @@ def load_awesomegpt_prompts() -> datasets.DatasetDict:
     tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     def decode(sample):
-        sample["user"] = "Give me 16 short sentences that best describe yourself. Start with \"1:\""
+        #sample["user"] = "Give me 16 short sentences that best describe yourself. Start with \"1:\""
+        sample["user"] = STATIC_USER_PROMPT
         sample["system"] = tokenizer.decode([i for i in sample["system_prompt"] if i!= -100], skip_special_tokens=True)
 
         sample["text"] = sample["system"] + "\n\n" + sample["user"]
@@ -135,7 +138,8 @@ def load_real_gpts() -> datasets.DatasetDict:
     tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     def decode(sample):
-        sample["user"] = "Give me 16 short sentences that best describe yourself. Start with \"1:\""
+        #sample["user"] = "Give me 16 short sentences that best describe yourself. Start with \"1:\""
+        sample["user"] = STATIC_USER_PROMPT
         sample["system"] = tokenizer.decode([i for i in sample["system_prompt"] if i!= -100], skip_special_tokens=True)
 
         sample["text"] = sample["system"] + "\n\n" + sample["user"]
