@@ -517,7 +517,7 @@ class Experiment(abc.ABC):
                     max_seq_length=self.model_args.max_seq_length,
                     padding=False,
                 ),
-                remove_columns=["text"],
+                remove_columns=["text", "prefix", "suffix"],
                 batched=True,
                 batch_size=1024,
                 num_proc=get_num_proc(),
