@@ -287,7 +287,7 @@ class TransformedHiddenStateEmbedder(Embedder, ABC):
             input_ids=embedder_input_ids,
             attention_mask=embedder_attention_mask,
             max_new_tokens=self.max_new_tokens,
-            min_new_tokens=self.min_new_tokens,
+            min_new_tokens=self.max_new_tokens,
             do_sample=False,
             temperature=1,
             top_p=None,
