@@ -333,6 +333,6 @@ def load_standard_val_datasets() -> datasets.DatasetDict:
         "awesomegpt_prompts": load_awesomegpt_prompts()["validation"],
         "real_gpts": load_real_gpts()["validation"],
     }
-    d = {k: retain_dataset_columns(v, ["text"]) for k, v in d.items()}
+    d = {k: retain_dataset_columns(v, ["text", "prefix", "suffix"]) for k, v in d.items()}
 
     return datasets.DatasetDict(d)
