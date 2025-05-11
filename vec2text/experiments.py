@@ -772,7 +772,10 @@ class InversionFromHiddenStatesExperiment(InversionFromLogitsExperiment):
 
     def load_model(self) -> transformers.PreTrainedModel:
         if self.model_args.pretrained_path is not None:
-            return InversionFromHiddenStatesModel.from_pretrained(self.model_args.pretrained_path)
+            model = InversionFromHiddenStatesModel.from_pretrained(self.model_args.pretrained_path)
+            for p in model.decoder.parameters():
+                p.requires_grad = False
+            return model
         return InversionFromHiddenStatesModel(config=self.config)
 
 

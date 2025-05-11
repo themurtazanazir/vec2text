@@ -9,7 +9,7 @@ import torch
 from vec2text.run_args import DataArguments
 from vec2text.utils import dataset_map_multi_worker, get_num_proc
 
-STATIC_USER_PROMPT = ""
+STATIC_USER_PROMPT = "You are?"
 
 def retain_dataset_columns(
     d: datasets.Dataset, allowed_columns: List[str]
@@ -327,13 +327,13 @@ def load_beir_datasets() -> datasets.DatasetDict:
 def load_standard_val_datasets() -> datasets.DatasetDict:
     """Loads a pre-defined set of standard val datasets."""
     d = {
-        "ag_news": load_ag_news_test(),
-        "anthropic_toxic_prompts": load_anthropic_toxic_prompts(),
-        "arxiv": load_arxiv_val(),
-        "python_code_alpaca": load_python_code_instructions_18k_alpaca(),
+        #"ag_news": load_ag_news_test(),
+        #"anthropic_toxic_prompts": load_anthropic_toxic_prompts(),
+        #"arxiv": load_arxiv_val(),
+        #"python_code_alpaca": load_python_code_instructions_18k_alpaca(),
         # "xsum_doc": load_xsum_val("document"),
         # "xsum_summ": load_xsum_val("summary"),
-        "wikibio": load_wikibio_val(),
+        #"wikibio": load_wikibio_val(),
         "awesomegpt_prompts": load_awesomegpt_prompts()["validation"],
         "real_gpts": load_real_gpts()["validation"],
     }

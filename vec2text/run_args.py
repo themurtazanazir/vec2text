@@ -22,6 +22,8 @@ DATASET_NAMES = [
     "one_million_instructions",
     "one_million_paired_instructions",
     "synthetic_gpts",
+    "awesomegpt_prompts",
+    "real_gpts"
 ]
 
 
